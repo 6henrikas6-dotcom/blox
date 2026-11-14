@@ -9,6 +9,7 @@ model GuildConfig {
   guildId String @id
   logChannelId String?
   announcementChannelId String?
+  suggestionChannelId String?
   verifiedRoleId String?
   joinThreshold Int @default(8)
   lockdown Boolean @default(false)
