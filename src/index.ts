@@ -191,8 +191,8 @@ client.on(Events.InteractionCreate,async interaction=>{
    await audit(guildId,'VERIFY',userId);
    return;
   }
-  if(interaction.customId==='dg_ticket_cancel'){await interaction.update({content:'❌ Ticket kūrimas atšauktas.',components:[]});return;}
-  if(interaction.customId==='dg_ticket_close_cancel'){await interaction.update({content:'Ticketas paliktas atidarytas.',components:[]});return;}
+  if(interaction.customId==='dg_ticket_cancel'&&interaction.isButton()){await interaction.update({content:'❌ Ticket kūrimas atšauktas.',components:[]});return;}
+  if(interaction.customId==='dg_ticket_close_cancel'&&interaction.isButton()){await interaction.update({content:'Ticketas paliktas atidarytas.',components:[]});return;}
   if(interaction.customId==='dg_ticket_open'||interaction.customId==='dg_ticket_select'){
    const ticketType=interaction.isStringSelectMenu()?interaction.values[0]:'General';
    if(!ticketType.trim()||ticketType.length>70){await interaction.reply({content:'Netinkamas ticket pasirinkimas.',flags:MessageFlags.Ephemeral});return;}
@@ -218,7 +218,7 @@ client.on(Events.InteractionCreate,async interaction=>{
   }
   if(interaction.customId==='dg_ticket_close_confirm'){
    if(!interaction.isButton())return;
-   const ticket=await db.supportTicket.findUnique({where:{channelId:interaction.channelId}});
+   const ticket=await db.supportTicket.findUnique({where:{channelId:interaction.channelId??''}});
    if(!ticket||ticket.status!=='open')return;
    const member=await guild.members.fetch(userId);
    if(ticket.userId!==userId&&!member.permissions.has(PermissionFlagsBits.ManageChannels)&&(!cfg.supportRoleId||!member.roles.cache.has(cfg.supportRoleId))){await interaction.reply({content:'Neturi teisės uždaryti.',flags:MessageFlags.Ephemeral});return;}
