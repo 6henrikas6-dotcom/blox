@@ -64,6 +64,7 @@ model CommunityPanel {
   ticketCategoryId String?
   supportRoleId String?
   ticketMessage String @default("Reikia pagalbos? Atidaryk ticketą.")
+  ticketOptionsJson String?
   updatedAt DateTime @updatedAt
 }
 model SupportTicket {
