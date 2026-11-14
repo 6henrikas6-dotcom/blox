@@ -14,6 +14,7 @@ export async function POST(req:NextRequest){
  const title=string(form.get('title')).trim(),description=string(form.get('description')).trim(),content=string(form.get('content')).trim(),footer=string(form.get('footer')).trim(),author=string(form.get('author')).trim(),imageUrl=string(form.get('imageUrl')).trim(),thumbnailUrl=string(form.get('thumbnailUrl')).trim(),color=string(form.get('color')).trim();
  const pingEveryone=string(form.get('everyone'))==='true';
  const roleId=string(form.get('roleId'));
+ const requestedChannelId=string(form.get('channelId'));
  if(roleId&&!/^\d{17,20}$/.test(roleId))return NextResponse.json({error:'Netinkamas rolės ID'},{status:400});
  const file=form.get('image');
  if(title.length>256||description.length>4000||content.length>2000||footer.length>2048||author.length>256||(!title&&!description&&!content))return NextResponse.json({error:'Patikrink tekstą ir laukų ilgį'},{status:400});
@@ -21,7 +22,14 @@ export async function POST(req:NextRequest){
  if(!validUrl(imageUrl)||!validUrl(thumbnailUrl))return NextResponse.json({error:'Nuotraukų adresai turi būti HTTPS'},{status:400});
  if(file!==null&&(!(file instanceof File)||!allowed.has(file.type)||file.size>8*1024*1024||file.size===0))return NextResponse.json({error:'Įkelk PNG, JPG, WEBP arba GIF iki 8 MB'},{status:400});
  const cfg=await db.guildConfig.findUnique({where:{guildId}});
- if(!cfg?.announcementChannelId)return NextResponse.json({error:'Pirmiausia Security nustatymuose pasirink Announcements kanalą'},{status:400});
+ const channelId=requestedChannelId||cfg?.announcementChannelId;
+ if(!channelId||!/^\d{17,20}$/.test(channelId))return NextResponse.json({error:'Pasirink Discord kanalą'},{status:400});
+ try{
+  const channelRes=await fetch(discordApi+'/channels/'+channelId,{headers:{Authorization:'Bot '+token},cache:'no-store'});
+  if(!channelRes.ok)return NextResponse.json({error:'Botas negali pasiekti pasirinkto kanalo'},{status:400});
+  const channel=await channelRes.json() as {guild_id?:string;type?:number};
+  if(channel.guild_id!==guildId||![0,5].includes(channel.type??-1))return NextResponse.json({error:'Pasirink tekstinį kanalą šiame serveryje'},{status:400});
+ }catch{return NextResponse.json({error:'Nepavyko patikrinti kanalo'},{status:502});}
  const embeds=[] as Record<string,unknown>[];
  if(title||description||file||imageUrl||thumbnailUrl||footer||author){
   const embed:Record<string,unknown>={color:/^#[0-9a-fA-F]{6}$/.test(color)?parseInt(color.slice(1),16):5793266};
@@ -45,11 +53,11 @@ export async function POST(req:NextRequest){
   }catch{return NextResponse.json({error:'Nepavyko patikrinti rolės'},{status:502});}
  }
  const mentionText=[pingEveryone?'@everyone':'',selectedRole?'<@&'+selectedRole+'>':''].filter(Boolean).join(' ');
- const payload={content:[mentionText,content].filter(Boolean).join('\\n'),embeds,allowed_mentions:{parse:pingEveryone?['everyone']:[],roles:selectedRole?[selectedRole]:[]}};
+ const payload={content:[mentionText,content].filter(Boolean).join('\n'),embeds,allowed_mentions:{parse:pingEveryone?['everyone']:[],roles:selectedRole?[selectedRole]:[]}};
  const data=new FormData();data.set('payload_json',JSON.stringify(payload));
  if(file instanceof File){const name=file.type==='image/png'?'image.png':file.type==='image/jpeg'?'image.jpg':file.type==='image/webp'?'image.webp':'image.gif';data.set('files[0]',file,name);}
  try{
-  const res=await fetch(discordApi+'/channels/'+cfg.announcementChannelId+'/messages',{method:'POST',headers:{Authorization:'Bot '+token},body:data,cache:'no-store'});
+  const res=await fetch(discordApi+'/channels/'+channelId+'/messages',{method:'POST',headers:{Authorization:'Bot '+token},body:data,cache:'no-store'});
   if(!res.ok)return NextResponse.json({error:'Discord atmetė pranešimą ('+res.status+'). Patikrink boto leidimus, failo dydį ir URL.'},{status:502});
   await db.auditEvent.create({data:{guildId,actorId:user.id,event:'DASHBOARD_ANNOUNCEMENT',detail:title||'Embed announcement'}}).catch(()=>{});
   return NextResponse.json({ok:true});
