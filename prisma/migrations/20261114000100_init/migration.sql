@@ -43,3 +43,10 @@ CREATE TABLE "Xp" (
  "lastEarnedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
  CONSTRAINT "Xp_pkey" PRIMARY KEY ("guildId","userId")
 );
+
+CREATE TABLE "LockdownOverwrite" (
+ "guildId" TEXT NOT NULL,
+ "channelId" TEXT NOT NULL,
+ "previous" TEXT NOT NULL,
+ CONSTRAINT "LockdownOverwrite_pkey" PRIMARY KEY ("guildId","channelId")
+);
