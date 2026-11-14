@@ -3,17 +3,16 @@ import { drawText } from './review-card.js';
 
 const trim=(s:string,max:number)=>Array.from(s).slice(0,max).join('');
 export async function welcomeCard(name:string,count:number,avatarUrl:string):Promise<Buffer>{
- const grid=Array.from({length:18},(_,i)=>'<path d="M '+(i*40)+' 0 V 510"/>').join('')+Array.from({length:5},(_,i)=>'<path d="M 0 '+(i*40)+' H 1200"/>').join('');
- const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="280" viewBox="0 0 1200 280">
+ const width=1200,height=280;
+ const grid=Array.from({length:Math.ceil(width/40)+1},(_,i)=>'<path d="M '+(i*40)+' 0 V '+height+'"/>').join('')
+  +Array.from({length:Math.ceil(height/40)+1},(_,i)=>'<path d="M 0 '+(i*40)+' H '+width+'"/>').join('');
+ const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
  <rect width="1200" height="280" rx="22" fill="#050505"/>
- <g stroke="#333" stroke-width="1.4" opacity=".9">${grid}</g>
- <rect x="32" y="30" width="1136" height="450" rx="22" fill="#090909" fill-opacity=".3"/>
- ${drawText('WELCOME TO LEXTRUM',600,130,65,'#fff',true,'middle')}
- ${drawText('PRODUCTION',600,190,65,'#fff',true,'middle')}
- <circle cx="194" cy="325" r="106" fill="#202020" stroke="#777" stroke-width="3"/>
- ${drawText('Welcome to Lextrum Production',362,284,28,'#bfbfbf')}
- ${drawText(trim(name,22),362,363,60,'#fff',true)}
- ${drawText('Member #'+count.toLocaleString('en-US'),362,419,28,'#aaa')}
+ <g stroke="#292929" stroke-width="1.4" opacity=".85">${grid}</g>
+ <circle cx="150" cy="140" r="106" fill="#202020" stroke="#777" stroke-width="3"/>
+ ${drawText('Welcome to Lextrum Production',300,91,28,'#bfbfbf')}
+ ${drawText(trim(name,22),300,166,60,'#fff',true)}
+ ${drawText('Member #'+count.toLocaleString('en-US'),300,225,28,'#aaa')}
  </svg>`;
  const base=sharp(Buffer.from(svg));
  try{
