@@ -17,3 +17,6 @@
 .embed-thumb{width:72px;height:72px;object-fit:cover;border-radius:6px;float:right;margin-left:12px}
 .embed-footer{display:block;color:#b5bac1;font-size:11px;margin-top:12px}
 @media(max-width:1000px){.embed-builder{grid-template-columns:1fr}.discord-content,.preview .rich-embed{margin-left:0}}
+
+.discord-buttons{margin:12px 0 0 48px}.discord-buttons span{display:inline-block;background:#5865f2;border-radius:5px;color:white;font-size:13px;font-weight:700;padding:11px 16px}
+@media(max-width:1000px){.discord-buttons{margin-left:0}}
