@@ -1,0 +1,25 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+model GuildConfig {
+  guildId String @id
+  logChannelId String?
+  announcementChannelId String?
+  verifiedRoleId String?
+  joinThreshold Int @default(8)
+  lockdown Boolean @default(false)
+  updatedAt DateTime @updatedAt
+}
+model AuditEvent {
+  id String @id @default(cuid())
+  guildId String
+  actorId String?
+  event String
+  detail String?
+  createdAt DateTime @default(now())
+  @@index([guildId, createdAt])
+}
