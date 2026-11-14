@@ -1,8 +1,8 @@
 import { cookies, headers } from 'next/headers';
 import { EncryptJWT, jwtDecrypt } from 'jose';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 const cookieName='devguard_session';
-const secret=()=>{const s=process.env.AUTH_SECRET;if(!s||s.length<32)throw new Error('AUTH_SECRET must have at least 32 characters');return new TextEncoder().encode(s);};
+const secret=()=>{const s=process.env.AUTH_SECRET;if(!s||s.length<32)throw new Error('AUTH_SECRET must have at least 32 characters');return createHash('sha256').update(s).digest();};
 export const randomState=()=>randomBytes(24).toString('hex');
 export const appUrl=()=>{const url=process.env.APP_URL;if(!url)throw new Error('APP_URL is missing');return new URL(url).origin;};
 export const cookieOptions=()=>({httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax' as const,path:'/',maxAge:60*60*8});
