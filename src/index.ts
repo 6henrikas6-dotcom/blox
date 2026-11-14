@@ -18,10 +18,10 @@ const inviteCache=new Map<string,Map<string,{uses:number;inviterId:string|null}>
 
 const messageBursts=new Map<string,{at:number;signature:string;attachmentCount:number}[]>();
 const violations=new Map<string,{count:number;last:number}>();
-const suspiciousWords=/\\b(?:free\\s+(?:nitro|robux|money)|claim\\s+(?:your\\s+)?(?:reward|bonus)|withdrawal\\s+success|deposit\\s+to\\s+(?:claim|unlock)|crypto\\s+giveaway)\\b/i;
+const suspiciousWords=/\b(?:free\s+(?:nitro|robux|money)|claim\s+(?:your\s+)?(?:reward|bonus)|withdrawal\s+success|deposit\s+to\s+(?:claim|unlock)|crypto\s+giveaway)\b/i;
 async function antiRaidLog(guildId:string,details:string){
  const guild=client.guilds.cache.get(guildId);
- const channel=guild?.channels.cache.find(ch=>ch.type===ChannelType.GuildText && /^(?:・|･|#|\\s|-)*anti[- _]?raid(?:[- _]?logs?)?$/i.test(ch.name));
+ const channel=guild?.channels.cache.find(ch=>ch.type===ChannelType.GuildText && /^(?:・|･|#|\s|-)*anti[- _]?raid(?:[- _]?logs?)?$/i.test(ch.name));
  if(channel?.isTextBased() && 'send' in channel){
   await channel.send({content:details.slice(0,1900),allowedMentions:{parse:[]}}).catch(e=>log.warn(e,'Anti-raid log failed'));
  }else{
@@ -32,16 +32,16 @@ async function moderateSpam(message:import('discord.js').Message<true>):Promise<
  if(message.member?.permissions.has(PermissionFlagsBits.ManageMessages))return false;
  const key=message.guildId+':'+message.author.id,now=Date.now();
  const text=message.content.toLowerCase().trim();
- const images=message.attachments.filter(a=>a.contentType?.startsWith('image/')||/\\.(?:png|jpe?g|gif|webp)$/i.test(a.name)).size;
- const signature=text.replace(/https?:\\/\\/\\S+/g,'[link]').replace(/\\s+/g,' ').slice(0,220);
+ const images=message.attachments.filter(a=>a.contentType?.startsWith('image/')||/\.(?:png|jpe?g|gif|webp)$/i.test(a.name)).size;
+ const signature=text.replace(/https?:\/\/\S+/g,'[link]').replace(/\s+/g,' ').slice(0,220);
  const history=(messageBursts.get(key)??[]).filter(x=>now-x.at<45_000);
  history.push({at:now,signature,attachmentCount:images});
  messageBursts.set(key,history);
  const duplicateCount=history.filter(x=>x.signature===signature && (signature.length>=12||images>0)).length;
  const recentImages=history.filter(x=>now-x.at<20_000).reduce((n,x)=>n+x.attachmentCount,0);
- const everyone=message.mentions.everyone || /<@&\\d+>/.test(text) && message.mentions.roles.size>=4;
+ const everyone=message.mentions.everyone || /<@&\d+>/.test(text) && message.mentions.roles.size>=4;
  const massMentions=message.mentions.users.size>=8;
- const suspiciousPromo=suspiciousWords.test(text) && (images>=2||/https?:\\/\\//i.test(text));
+ const suspiciousPromo=suspiciousWords.test(text) && (images>=2||/https?:\/\//i.test(text));
  const flood=history.filter(x=>now-x.at<10_000).length>=7;
  const reason=everyone?'@everyone/@here arba masiniai role paminėjimai':massMentions?'Masiniai narių paminėjimai':duplicateCount>=3?'Pasikartojantis spam':(images>=4||recentImages>=8)?'Masinis nuotraukų spam':suspiciousPromo?'Įtartina reklama / scam':flood?'Žinučių flood':null;
  if(!reason)return false;
@@ -54,7 +54,7 @@ async function moderateSpam(message:import('discord.js').Message<true>):Promise<
   const timed=await message.member.timeout(duration*60_000,'Lextrum AutoMod: '+reason).then(()=>true).catch(()=>false);
   if(timed)action='Timeout '+duration+' min';
  }
- const details='🛡️ **Anti-raid / AutoMod**\\nNarys: <@'+message.author.id+'> ('+message.author.id+')\\nKanalas: <#'+message.channelId+'>\\nPriežastis: '+reason+'\\nVeiksmas: '+action+'\\nIštrinta: '+(deleted?'taip':'ne (trūksta teisių)')+'\\nPriedai: '+message.attachments.size+'\\nTekstas: '+(message.content.slice(0,350).replace(/@/g,'＠')||'[tik failai]');
+ const details='🛡️ **Anti-raid / AutoMod**\nNarys: <@'+message.author.id+'> ('+message.author.id+')\nKanalas: <#'+message.channelId+'>\nPriežastis: '+reason+'\nVeiksmas: '+action+'\nIštrinta: '+(deleted?'taip':'ne (trūksta teisių)')+'\nPriedai: '+message.attachments.size+'\nTekstas: '+(message.content.slice(0,350).replace(/@/g,'＠')||'[tik failai]');
  await antiRaidLog(message.guildId,details);
  await audit(message.guildId,'AUTOMOD_SPAM',message.author.id,reason+'; '+action);
  return true;
