@@ -39,7 +39,7 @@ export async function POST(req:NextRequest){
   if(image instanceof File)embed.image={url:'attachment://'+(image.type==='image/png'?'panel.png':image.type==='image/jpeg'?'panel.jpg':image.type==='image/webp'?'panel.webp':'panel.gif')};
   else if(data.imageUrl)embed.image={url:data.imageUrl};
   const selector=mode==='ticket'&&ticketOptions.length>0;
-  const components=selector?[{type:1,components:[{type:3,custom_id:'dg_ticket_select',placeholder:'Choose your option down below',min_values:1,max_values:1,options:ticketOptions.map(o=>({label:o.label,value:o.label,description:o.description,...(o.emoji&&/\p{Extended_Pictographic}/u.test(o.emoji)?{emoji:{name:o.emoji}}:{})))}]}]:[{type:1,components:[{type:2,style:mode==='verify'?3:1,label:mode==='verify'?'Verify':'Create Ticket',custom_id:mode==='verify'?'dg_verify':'dg_ticket_open'}]}];
+  const components=selector?[{type:1,components:[{type:3,custom_id:'dg_ticket_select',placeholder:'Choose your option down below',min_values:1,max_values:1,options:ticketOptions.map(o=>({label:o.label,value:o.label,description:o.description,...(o.emoji&&/\p{Extended_Pictographic}/u.test(o.emoji)?{emoji:{name:o.emoji}}:{})}))}]}]:[{type:1,components:[{type:2,style:mode==='verify'?3:1,label:mode==='verify'?'Verify':'Create Ticket',custom_id:mode==='verify'?'dg_verify':'dg_ticket_open'}]}];
   const payload={embeds:[embed],components,allowed_mentions:{parse:[]}};
   const multipart=new FormData();multipart.set('payload_json',JSON.stringify(payload));
   if(image instanceof File){const ext=image.type==='image/png'?'png':image.type==='image/jpeg'?'jpg':image.type==='image/webp'?'webp':'gif';multipart.set('files[0]',image,'panel.'+ext);}
