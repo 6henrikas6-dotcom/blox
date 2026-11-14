@@ -398,7 +398,7 @@ client.on(Events.InteractionCreate,async interaction=>{
     const average=count?staffRatings.reduce((sum,item)=>sum+(item.feedbackRating??0),0)/count:rating;
     const ticketName='ticket-'+ticket.channelId.slice(-6);
     const card=await reviewCard({name:reviewer?.displayName??reviewer?.username??'Narys',staffName:staff?.displayName??staff?.username??'Support Team',rating,avatarUrl:reviewer?.displayAvatarURL({extension:'png',size:128}),count:count||1,average,ticketName});
-    await channel.send({content:'⭐ **Staff įvertinimas** • '+rating+'/5 • '+(staff?'<@'+staff.id+'>':'Support Team'),files:[new AttachmentBuilder(card,{name:'staff-review.png'})],allowedMentions:{parse:[]}});
+    await channel.send({content:'',files:[new AttachmentBuilder(card,{name:'staff-review.png'})],allowedMentions:{parse:[]}});
     delivered=true;
    }catch(e){log.error({error:e,channelId:channel.id,ticketId},'Feedback log delivery failed');}
   }
