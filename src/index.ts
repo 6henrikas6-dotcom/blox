@@ -145,8 +145,8 @@ client.on(Events.InteractionCreate,async interaction=>{
 });
 
 client.on(Events.InteractionCreate,async interaction=>{
- if(!interaction.isButton()||!interaction.inGuild())return;
- if(!['dg_verify','dg_ticket_open','dg_ticket_close'].includes(interaction.customId))return;
+ if((!interaction.isButton()&&!interaction.isStringSelectMenu())||!interaction.inGuild())return;
+ if(!['dg_verify','dg_ticket_open','dg_ticket_close','dg_ticket_select'].includes(interaction.customId))return;
  try{
   const guild=interaction.guild!,guildId=guild.id,userId=interaction.user.id;
   const cfg=await db.communityPanel.findUnique({where:{guildId}});
@@ -161,7 +161,9 @@ client.on(Events.InteractionCreate,async interaction=>{
    await audit(guildId,'VERIFY',userId);
    return;
   }
-  if(interaction.customId==='dg_ticket_open'){
+  if(interaction.customId==='dg_ticket_open'||interaction.customId==='dg_ticket_select'){
+   const ticketType=interaction.isStringSelectMenu()?interaction.values[0]:null;
+   if(ticketType&&(!ticketType.trim()||ticketType.length>70)){await interaction.reply({content:'Netinkamas ticket pasirinkimas.',flags:MessageFlags.Ephemeral});return;}
    if(!cfg.ticketCategoryId){await interaction.reply({content:'Ticket kategorija nenustatyta.',flags:MessageFlags.Ephemeral});return;}
    await interaction.deferReply({flags:MessageFlags.Ephemeral});
    const existing=await db.supportTicket.findFirst({where:{guildId,userId,status:'open'}});
@@ -174,12 +176,12 @@ client.on(Events.InteractionCreate,async interaction=>{
     {id:me.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ManageChannels]}
    ];
    if(cfg.supportRoleId)overwrites.push({id:cfg.supportRoleId,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]});
-   const channel=await guild.channels.create({name:'ticket-'+userId.slice(-6),type:ChannelType.GuildText,parent:cfg.ticketCategoryId,permissionOverwrites:overwrites,reason:'DevGuard support ticket'});
+   const channel=await guild.channels.create({name:(ticketType?ticketType.toLowerCase().normalize('NFKD').replace(/[^a-z0-9-]/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,32)+'-':'ticket-')+userId.slice(-6),type:ChannelType.GuildText,parent:cfg.ticketCategoryId,permissionOverwrites:overwrites,reason:'DevGuard support ticket'});
    try{await db.supportTicket.create({data:{guildId,userId,channelId:channel.id}});}catch(e){await channel.delete().catch(()=>{});throw e;}
    const row=new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('dg_ticket_close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger));
-   await channel.send({content:'Support ticket • <@'+userId+'>' +(cfg.supportRoleId?' <@&'+cfg.supportRoleId+'>':''),components:[row],allowedMentions:{users:[userId],roles:cfg.supportRoleId?[cfg.supportRoleId]:[]}});
+   await channel.send({content:(ticketType?'**'+ticketType.replace(/[*_~`\\]/g,'')+'** • ':'Support ticket • ')+'<@'+userId+'>' +(cfg.supportRoleId?' <@&'+cfg.supportRoleId+'>':''),components:[row],allowedMentions:{users:[userId],roles:cfg.supportRoleId?[cfg.supportRoleId]:[]}});
    await interaction.editReply('Ticketas sukurtas: <#'+channel.id+'>');
-   await audit(guildId,'TICKET_OPEN',userId,channel.id);
+   await audit(guildId,'TICKET_OPEN',userId,(ticketType?ticketType+' • ':'')+channel.id);
    return;
   }
   const ticket=await db.supportTicket.findUnique({where:{channelId:interaction.channelId}});
