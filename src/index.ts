@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
-import { Client, GatewayIntentBits, Events, PermissionFlagsBits, ChannelType, EmbedBuilder, MessageFlags } from 'discord.js';
+import { Client, GatewayIntentBits, Events, PermissionFlagsBits, ChannelType, EmbedBuilder, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import pino from 'pino';
 import { REST, Routes } from 'discord.js';
 import { commands } from './commands.js';
@@ -143,6 +143,54 @@ client.on(Events.InteractionCreate,async interaction=>{
     else await interaction.reply({content:'An error occurred. Check permissions and logs.',flags:MessageFlags.Ephemeral}).catch(()=>{});
   }
 });
+
+client.on(Events.InteractionCreate,async interaction=>{
+ if(!interaction.isButton()||!interaction.inGuild())return;
+ if(!['dg_verify','dg_ticket_open','dg_ticket_close'].includes(interaction.customId))return;
+ try{
+  const guild=interaction.guild!,guildId=guild.id,userId=interaction.user.id;
+  const cfg=await db.communityPanel.findUnique({where:{guildId}});
+  if(!cfg){await interaction.reply({content:'Sistema dar nesukonfigūruota.',flags:MessageFlags.Ephemeral});return;}
+  if(interaction.customId==='dg_verify'){
+   if(!cfg.verifiedRoleId){await interaction.reply({content:'Verify rolė nenustatyta.',flags:MessageFlags.Ephemeral});return;}
+   const member=await guild.members.fetch(userId);
+   await member.roles.add(cfg.verifiedRoleId,'DevGuard verification');
+   await interaction.reply({content:'Patvirtinta! Rolė suteikta.',flags:MessageFlags.Ephemeral});
+   await audit(guildId,'VERIFY',userId);
+   return;
+  }
+  if(interaction.customId==='dg_ticket_open'){
+   if(!cfg.ticketCategoryId){await interaction.reply({content:'Ticket kategorija nenustatyta.',flags:MessageFlags.Ephemeral});return;}
+   await interaction.deferReply({flags:MessageFlags.Ephemeral});
+   const existing=await db.supportTicket.findFirst({where:{guildId,userId,status:'open'}});
+   if(existing){const old=await guild.channels.fetch(existing.channelId).catch(()=>null);if(old){await interaction.editReply('Jau turi atidarytą ticketą: <#'+existing.channelId+'>');return;}await db.supportTicket.update({where:{id:existing.id},data:{status:'closed',closedAt:new Date()}});}
+   const me=await guild.members.fetchMe();
+   if(!me.permissions.has(PermissionFlagsBits.ManageChannels)){await interaction.editReply('Botui trūksta Manage Channels leidimo.');return;}
+   const overwrites=[
+    {id:guild.roles.everyone.id,deny:[PermissionFlagsBits.ViewChannel]},
+    {id:userId,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]},
+    {id:me.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ManageChannels]}
+   ];
+   if(cfg.supportRoleId)overwrites.push({id:cfg.supportRoleId,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]});
+   const channel=await guild.channels.create({name:'ticket-'+userId.slice(-6),type:ChannelType.GuildText,parent:cfg.ticketCategoryId,permissionOverwrites:overwrites,reason:'DevGuard support ticket'});
+   try{await db.supportTicket.create({data:{guildId,userId,channelId:channel.id}});}catch(e){await channel.delete().catch(()=>{});throw e;}
+   const row=new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('dg_ticket_close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger));
+   await channel.send({content:'Support ticket • <@'+userId+'>' +(cfg.supportRoleId?' <@&'+cfg.supportRoleId+'>':''),components:[row],allowedMentions:{users:[userId],roles:cfg.supportRoleId?[cfg.supportRoleId]:[]}});
+   await interaction.editReply('Ticketas sukurtas: <#'+channel.id+'>');
+   await audit(guildId,'TICKET_OPEN',userId,channel.id);
+   return;
+  }
+  const ticket=await db.supportTicket.findUnique({where:{channelId:interaction.channelId}});
+  if(!ticket||ticket.status!=='open'){await interaction.reply({content:'Ticketas nerastas arba uždarytas.',flags:MessageFlags.Ephemeral});return;}
+  const member=await guild.members.fetch(userId);
+  if(ticket.userId!==userId&&!member.permissions.has(PermissionFlagsBits.ManageChannels)&&(!cfg.supportRoleId||!member.roles.cache.has(cfg.supportRoleId))){await interaction.reply({content:'Neturi teisės uždaryti šio ticketo.',flags:MessageFlags.Ephemeral});return;}
+  await interaction.reply({content:'Ticketas uždaromas.',flags:MessageFlags.Ephemeral});
+  await db.supportTicket.update({where:{id:ticket.id},data:{status:'closed',closedAt:new Date()}});
+  await audit(guildId,'TICKET_CLOSE',userId,ticket.channelId);
+  await interaction.channel?.delete().catch(e=>log.error(e,'Ticket channel delete failed'));
+ }catch(e){log.error(e,'Community panel interaction failed');if(interaction.deferred||interaction.replied)await interaction.editReply('Įvyko klaida. Patikrink boto leidimus.').catch(()=>{});else await interaction.reply({content:'Įvyko klaida. Patikrink boto leidimus.',flags:MessageFlags.Ephemeral}).catch(()=>{});}
+});
+
 const stop=async()=>{client.destroy();await db.$disconnect();process.exit(0);};
 process.once('SIGTERM',()=>{void stop();});
 process.once('SIGINT',()=>{void stop();});
