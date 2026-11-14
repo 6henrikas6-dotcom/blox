@@ -326,7 +326,7 @@ client.on(Events.InteractionCreate,async interaction=>{
   if(!updated.count){await interaction.followUp({content:'Ticketas jau uždarytas.',flags:MessageFlags.Ephemeral});return;}
   const file=new AttachmentBuilder(Buffer.from(transcript,'utf8'),{name:'ticket-'+ticket.id+'.txt'});
   {
-   const logs=await feedbackDestination(guildId,cfg.feedbackChannelId);
+   const logs=await transcriptDestination(guildId);
    if(logs)await logs.send({content:'📄 Ticket **'+(ch.type===ChannelType.GuildText?ch.name:'Support ticket')+'** uždarytas • <@'+ticket.userId+'> • uždarė <@'+userId+'>',files:[file],allowedMentions:{parse:[]}}).catch(e=>log.error(e,'Transcript channel delivery failed'));
   }
   await audit(guildId,'TICKET_CLOSE',userId,ticket.channelId).catch(e=>log.warn(e,'Ticket audit failed'));
@@ -340,6 +340,20 @@ client.on(Events.InteractionCreate,async interaction=>{
  }catch(e){log.error(e,'Community panel interaction failed');if(interaction.deferred||interaction.replied)await interaction.editReply('Įvyko klaida. Patikrink boto leidimus.').catch(()=>{});else await interaction.reply({content:'Įvyko klaida. Patikrink boto leidimus.',flags:MessageFlags.Ephemeral}).catch(()=>{});}
 });
 
+
+async function transcriptDestination(guildId:string){
+ const guild=await client.guilds.fetch(guildId).catch(()=>null);
+ if(!guild)return null;
+ const channels=await guild.channels.fetch().catch(()=>null);
+ const target=channels?.find(c=>{
+  if(c?.type!==ChannelType.GuildText)return false;
+  const name=c.name.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'');
+  return name.includes('transcript')||name.includes('stenogram');
+ });
+ if(target?.type===ChannelType.GuildText)return target;
+ log.warn({guildId},'Transcript channel not found; transcript remains saved in database');
+ return null;
+}
 
 async function feedbackDestination(guildId:string,configured:string|null|undefined){
  const guild=await client.guilds.fetch(guildId).catch(()=>null);
