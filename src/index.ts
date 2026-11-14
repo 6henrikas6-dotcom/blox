@@ -4,6 +4,7 @@ import { Client, GatewayIntentBits, Events, PermissionFlagsBits, ChannelType, Em
 import pino from 'pino';
 import { REST, Routes } from 'discord.js';
 import { commands } from './commands.js';
+import { reviewCard } from './review-card.js';
 
 const {DISCORD_TOKEN,DATABASE_URL}=process.env;
 if(!DISCORD_TOKEN || !DATABASE_URL) throw new Error('Missing DISCORD_TOKEN or DATABASE_URL');
@@ -390,7 +391,14 @@ client.on(Events.InteractionCreate,async interaction=>{
   let delivered=false;
   if(channel){
    try{
-    await channel.send({embeds:[new EmbedBuilder().setTitle('⭐ Ticket feedback').addFields({name:'Ticket',value:'Support ticket • '+ticket.channelId.slice(-6)},{name:'Įvertinimas',value:rating+'/5 ⭐'},{name:'Klientas',value:'<@'+ticket.userId+'>'},{name:'Support',value:ticket.claimedById?'<@'+ticket.claimedById+'>':'Nepriskirtas'}).setColor(0x8066f2).setTimestamp()],allowedMentions:{parse:[]}});
+    const reviewer=await client.users.fetch(ticket.userId).catch(()=>null);
+    const staff=ticket.claimedById?await client.users.fetch(ticket.claimedById).catch(()=>null):null;
+    const staffRatings=ticket.claimedById?await db.supportTicket.findMany({where:{guildId:ticket.guildId,claimedById:ticket.claimedById,feedbackRating:{not:null}},select:{feedbackRating:true}}):[];
+    const count=staffRatings.length;
+    const average=count?staffRatings.reduce((sum,item)=>sum+(item.feedbackRating??0),0)/count:rating;
+    const ticketName='ticket-'+ticket.channelId.slice(-6);
+    const card=await reviewCard({name:reviewer?.displayName??reviewer?.username??'Narys',staffName:staff?.displayName??staff?.username??'Support Team',rating,avatarUrl:reviewer?.displayAvatarURL({extension:'png',size:128}),count:count||1,average,ticketName});
+    await channel.send({content:'⭐ **Staff įvertinimas** • '+rating+'/5 • '+(staff?'<@'+staff.id+'>':'Support Team'),files:[new AttachmentBuilder(card,{name:'staff-review.png'})],allowedMentions:{parse:[]}});
     delivered=true;
    }catch(e){log.error({error:e,channelId:channel.id,ticketId},'Feedback log delivery failed');}
   }
