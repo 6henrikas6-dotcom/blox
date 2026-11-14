@@ -1,0 +1,18 @@
+import { redirect } from 'next/navigation';
+import { requireAdmin } from '@/lib/auth';
+import { db } from '@/lib/db';
+import { discord } from '@/lib/discord';
+import DashboardClient from './ui';
+export const dynamic='force-dynamic';
+type Channel={id:string;name:string;type:number};
+export default async function Dashboard(){
+ const user=await requireAdmin();if(!user)redirect('/');
+ const guildId=process.env.DISCORD_GUILD_ID!;
+ const [cfg,events,guild,channels]=await Promise.all([
+  db.guildConfig.findUnique({where:{guildId}}),
+  db.auditEvent.findMany({where:{guildId},orderBy:{createdAt:'desc'},take:30}),
+  discord('/guilds/'+guildId+'?with_counts=true').catch(()=>null),
+  discord('/guilds/'+guildId+'/channels').catch(()=>[])
+ ]);
+ return <DashboardClient user={user} guildName={guild?.name??'Discord server'} memberCount={guild?.approximate_member_count??null} config={{joinThreshold:cfg?.joinThreshold??8,lockdown:cfg?.lockdown??false,logChannelId:cfg?.logChannelId??'',announcementChannelId:cfg?.announcementChannelId??''}} channels={(channels as Channel[]).filter(c=>c.type===0||c.type===5).map(c=>({id:c.id,name:c.name}))} events={events.map(e=>({id:e.id,event:e.event,detail:e.detail,createdAt:e.createdAt.toISOString()}))}/>;
+}
