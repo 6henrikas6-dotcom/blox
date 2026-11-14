@@ -4,7 +4,7 @@ const escapeXml=(value:string)=>value.replace(/&/g,'&amp;').replace(/</g,'&lt;')
 const shorten=(value:string,max:number)=>value.length>max?value.slice(0,max-1)+'…':value;
 export async function reviewCard(data:{name:string;staffName:string;rating:number;avatarUrl?:string|null;count:number;average:number;ticketName:string}):Promise<Buffer>{
  const width=1200,height=390;
- const grid=Array.from({length:31},(_,i)=>'<path d="M '+(i*40)+' 0 V 390" />').join('')+Array.from({length:11},(_,i)=>'<path d="M 0 '+(i*40)+' H 390" />').join('');
+ const grid=Array.from({length:31},(_,i)=>'<path d="M '+(i*40)+' 0 V 390" />').join('')+Array.from({length:11},(_,i)=>'<path d="M 0 '+(i*40)+' H 1200" />').join('');
  const stars='★'.repeat(data.rating)+'☆'.repeat(5-data.rating);
  const averageStars='★'.repeat(Math.round(data.average))+'☆'.repeat(5-Math.round(data.average));
  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="390" viewBox="0 0 1200 390">
