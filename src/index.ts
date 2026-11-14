@@ -2,6 +2,8 @@ import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { Client, GatewayIntentBits, Events, PermissionFlagsBits, ChannelType, EmbedBuilder, MessageFlags } from 'discord.js';
 import pino from 'pino';
+import { REST, Routes } from 'discord.js';
+import { commands } from './commands.js';
 
 const {DISCORD_TOKEN,DATABASE_URL}=process.env;
 if(!DISCORD_TOKEN || !DATABASE_URL) throw new Error('Missing DISCORD_TOKEN or DATABASE_URL');
@@ -146,3 +148,12 @@ process.once('SIGTERM',()=>{void stop();});
 process.once('SIGINT',()=>{void stop();});
 await db.$connect();
 await client.login(DISCORD_TOKEN);
+const appId=process.env.DISCORD_CLIENT_ID;
+const guildId=process.env.DISCORD_GUILD_ID;
+if(appId && guildId){
+  try {
+    await new REST({version:'10'}).setToken(DISCORD_TOKEN).put(Routes.applicationGuildCommands(appId,guildId),{body:commands});
+    log.info({guildId,count:commands.length},'Slash commands registered');
+  } catch(error){log.error(error,'Slash command registration failed');}
+}else{log.warn('DISCORD_CLIENT_ID or DISCORD_GUILD_ID missing: slash commands not registered');}
+
