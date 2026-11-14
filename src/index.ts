@@ -115,6 +115,12 @@ client.on(Events.InteractionCreate,async interaction=>{
     if(privileged && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){
       await interaction.reply({content:'Manage Server permission required.',flags:MessageFlags.Ephemeral});return;
     }
+    if(cmd==='ticket-config'){
+      if(!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){await interaction.reply({content:'Reikia Manage Server teisės.',flags:MessageFlags.Ephemeral});return;}
+      const channel=interaction.options.getChannel('feedback_channel',true);
+      await db.communityPanel.upsert({where:{guildId:id},create:{guildId:id,feedbackChannelId:channel.id},update:{feedbackChannelId:channel.id}});
+      await interaction.reply({content:'⭐ Transcript ir feedback kanalas nustatytas: <#'+channel.id+'>',flags:MessageFlags.Ephemeral});return;
+    }
     if(cmd==='ping'){await interaction.reply({content:'Pong! Bot is online.',flags:MessageFlags.Ephemeral});return;}
     if(cmd==='setup'){
       const logChannelId=interaction.options.getChannel('log_channel')?.id??null;
@@ -234,7 +240,7 @@ client.on(Events.InteractionCreate,async interaction=>{
    const fields=(questions?.length?questions:[{label:'Priežastis / Reason',style:'short',required:true},{label:'Aprašyk problemą / Details',style:'paragraph',required:true}]).slice(0,5);
    const answers=fields.map((q,i)=>({name:q.label,value:interaction.fields.getTextInputValue('q'+i)||'—'}));
    const subject=answers[0]?.value??ticketType;
-   const details=answers.map(a=>'**'+a.name+'**\\n'+a.value).join('\\n\\n').slice(0,3900);
+   const details=answers.map(a=>'**'+a.name+'**\\n'+a.value).join('\n\n').slice(0,3900);
    if(!cfg.ticketCategoryId){await interaction.reply({content:'Ticket kategorija nenustatyta.',flags:MessageFlags.Ephemeral});return;}
    await interaction.deferReply({flags:MessageFlags.Ephemeral});
    const existing=await db.supportTicket.findFirst({where:{guildId,userId,status:'open'}});
@@ -273,22 +279,65 @@ client.on(Events.InteractionCreate,async interaction=>{
    const row=new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('dg_ticket_close_confirm').setLabel('Taip, uždaryti').setStyle(ButtonStyle.Danger),new ButtonBuilder().setCustomId('dg_ticket_close_cancel').setLabel('Atšaukti').setStyle(ButtonStyle.Secondary));
    await interaction.reply({content:'Ar tikrai nori uždaryti šį ticketą?',components:[row],flags:MessageFlags.Ephemeral});return;
   }
-  await interaction.reply({content:'Ticketas uždaromas.',flags:MessageFlags.Ephemeral});
-  try{
-   const ch=interaction.channel;
-   if(ch&&ch.isTextBased()&&'messages' in ch){
-    const messages=await ch.messages.fetch({limit:100});
-    const lines=[...messages.values()].sort((a,b)=>a.createdTimestamp-b.createdTimestamp).map(m=>new Date(m.createdTimestamp).toISOString()+' '+m.author.tag+': '+m.content+' '+m.attachments.map(a=>a.url).join(' '));
-    const file=new AttachmentBuilder(Buffer.from(lines.join('\\n')||'No messages','utf8'),{name:'ticket-'+ticket.id+'.txt'});
-    const logCfg=await db.guildConfig.findUnique({where:{guildId}});
-    if(logCfg?.logChannelId){const logs=await guild.channels.fetch(logCfg.logChannelId).catch(()=>null);if(logs?.isTextBased()&&'send' in logs)await logs.send({content:'📄 Ticket transcript • '+ticket.channelId+' • closed by <@'+userId+'>',files:[file],allowedMentions:{parse:[]}});}
+  await interaction.deferUpdate();
+  const ch=interaction.channel;
+  if(!ch||!ch.isTextBased()||!('messages' in ch)){await interaction.followUp({content:'Ticket kanalas nepasiekiamas.',flags:MessageFlags.Ephemeral});return;}
+  // Persist transcript before deleting the channel. Include attachments and paginate history.
+  const lines:string[]=[];
+  let before:string|undefined;
+  for(let page=0;page<50;page++){
+   const batch=await ch.messages.fetch({limit:100,...(before?{before}:{})});
+   if(!batch.size)break;
+   for(const msg of batch.values()){
+    const content=msg.content||'[embed / attachment / interaction]';
+    lines.push(new Date(msg.createdTimestamp).toISOString()+' '+msg.author.tag+' ('+msg.author.id+'): '+content+' '+msg.attachments.map(a=>a.url).join(' '));
    }
-  }catch(e){log.error(e,'Transcript export failed');}
-
-  await db.supportTicket.update({where:{id:ticket.id},data:{status:'closed',closedAt:new Date()}});
-  await audit(guildId,'TICKET_CLOSE',userId,ticket.channelId);
+   before=batch.last()?.id;
+   if(batch.size<100)break;
+  }
+  const transcript=lines.reverse().join('\n').slice(0,7_000_000)||'No messages.';
+  const claimedBy=/^Claimed by .*\\((\\d+)\\)$/.exec(ch.type===ChannelType.GuildText?(ch.topic??''):'')?.[1]??null;
+  const updated=await db.supportTicket.updateMany({where:{id:ticket.id,status:'open'},data:{status:'closed',closedAt:new Date(),closedById:userId,claimedById:claimedBy,transcriptText:transcript}});
+  if(!updated.count){await interaction.followUp({content:'Ticketas jau uždarytas.',flags:MessageFlags.Ephemeral});return;}
+  const file=new AttachmentBuilder(Buffer.from(transcript,'utf8'),{name:'ticket-'+ticket.id+'.txt'});
+  const logCfg=await db.guildConfig.findUnique({where:{guildId}});
+  const target=cfg.feedbackChannelId??logCfg?.logChannelId;
+  if(target){
+   const logs=await guild.channels.fetch(target).catch(()=>null);
+   if(logs?.isTextBased()&&'send' in logs)await logs.send({content:'📄 Ticket #'+ticket.id+' uždarytas • <@'+ticket.userId+'> • uždarė <@'+userId+'>',files:[file],allowedMentions:{parse:[]}}).catch(e=>log.error(e,'Transcript channel delivery failed'));
+  }
+  await audit(guildId,'TICKET_CLOSE',userId,ticket.channelId).catch(e=>log.warn(e,'Ticket audit failed'));
+  try{
+   const owner=await client.users.fetch(ticket.userId);
+   const row=new ActionRowBuilder<ButtonBuilder>().addComponents([1,2,3,4,5].map(n=>new ButtonBuilder().setCustomId('dg_feedback:'+ticket.id+':'+n).setLabel(n+' ⭐').setStyle(n>=4?ButtonStyle.Success:ButtonStyle.Secondary)));
+   await owner.send({content:'🎫 Tavo ticketas **'+ticket.id+'** uždarytas. Įvertink pagalbą nuo 1 iki 5 žvaigždučių. Atsakymas bus perduotas support komandai.',components:[row]});
+  }catch(e){log.warn({ticketId:ticket.id,error:e},'Could not DM ticket feedback request');}
   await interaction.channel?.delete().catch(e=>log.error(e,'Ticket channel delete failed'));
+
  }catch(e){log.error(e,'Community panel interaction failed');if(interaction.deferred||interaction.replied)await interaction.editReply('Įvyko klaida. Patikrink boto leidimus.').catch(()=>{});else await interaction.reply({content:'Įvyko klaida. Patikrink boto leidimus.',flags:MessageFlags.Ephemeral}).catch(()=>{});}
+});
+
+
+client.on(Events.InteractionCreate,async interaction=>{
+ if(!interaction.isButton()||!interaction.customId.startsWith('dg_feedback:'))return;
+ try{
+  const match=/^dg_feedback:([^:]+):([1-5])$/.exec(interaction.customId);
+  if(!match){await interaction.reply({content:'Netinkamas įvertinimas.',flags:MessageFlags.Ephemeral});return;}
+  const [,ticketId,ratingText]=match;
+  const ticket=await db.supportTicket.findUnique({where:{id:ticketId}});
+  if(!ticket||ticket.userId!==interaction.user.id||ticket.status!=='closed'){await interaction.reply({content:'Šio ticketo vertinti negali.',flags:MessageFlags.Ephemeral});return;}
+  const rating=Number(ratingText);
+  const changed=await db.supportTicket.updateMany({where:{id:ticketId,feedbackRating:null,status:'closed'},data:{feedbackRating:rating,feedbackAt:new Date()}});
+  if(!changed.count){await interaction.reply({content:'Šis ticketas jau įvertintas.',flags:MessageFlags.Ephemeral});return;}
+  await interaction.update({content:'Ačiū! Įvertinai pagalbą '+rating+'/5 ⭐',components:[]});
+  const cfg=await db.communityPanel.findUnique({where:{guildId:ticket.guildId}});
+  const logCfg=await db.guildConfig.findUnique({where:{guildId:ticket.guildId}});
+  const target=cfg?.feedbackChannelId??logCfg?.logChannelId;
+  if(target){
+   const channel=await client.channels.fetch(target).catch(()=>null);
+   if(channel?.isTextBased()&&'send' in channel)await channel.send({embeds:[new EmbedBuilder().setTitle('⭐ Ticket feedback').addFields({name:'Ticket',value:ticketId},{name:'Įvertinimas',value:rating+'/5 ⭐'},{name:'Klientas',value:'<@'+ticket.userId+'>'},{name:'Support',value:ticket.claimedById?'<@'+ticket.claimedById+'>':'Nepriskirtas'}).setColor(0x8066f2).setTimestamp()],allowedMentions:{parse:[]}}).catch(e=>log.error(e,'Feedback log delivery failed'));
+  }
+ }catch(e){log.error(e,'Ticket feedback failed');if(!interaction.replied&&!interaction.deferred)await interaction.reply({content:'Nepavyko išsaugoti įvertinimo.',flags:MessageFlags.Ephemeral}).catch(()=>{});}
 });
 
 
