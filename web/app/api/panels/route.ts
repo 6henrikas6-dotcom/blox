@@ -44,6 +44,7 @@ export async function POST(req:NextRequest){
   const selector=mode==='ticket'&&ticketOptions.length>0;
   const defaultId=mode==='verify'?'dg_verify':'dg_ticket_open';
   const selected=buttons.length?buttons:[{label:mode==='verify'?'Verify':'Create Ticket',style:mode==='verify'?3:1,emoji:'',url:''}];
+  if(selected.filter(b=>b.style!==5).length>1)return NextResponse.json({error:'Viename panelyje gali būti tik vienas veiksmo mygtukas; kiti turi būti nuorodos'},{status:400});
   const actions=selected.map(b=>({type:2,style:b.style,...(b.label?{label:b.label}:{}),...(parseEmoji(b.emoji)?{emoji:parseEmoji(b.emoji)}:{}),...(b.style===5?{url:b.url}:{custom_id:defaultId})}));
   const components:unknown[]=[];
   if(selector)components.push({type:1,components:[{type:3,custom_id:'dg_ticket_select',placeholder:'Choose your option down below',min_values:1,max_values:1,options:ticketOptions.map(o=>({label:o.label,value:o.label,description:o.description,...(parseEmoji(o.emoji)?{emoji:parseEmoji(o.emoji)}:{})}))}]});
