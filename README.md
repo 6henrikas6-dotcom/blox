@@ -52,3 +52,7 @@ Modify `prisma/schema.prisma`, run `npx prisma migrate dev --name descriptive_na
 - The bot never mass-DMs users as a side effect of announcements. DM subscriptions are stored for a future rate-limited, consent-based sender.
 - Do not run multiple bot replicas against the same guild until distributed event handling and locking are implemented.
 - GitHub Actions checks TypeScript build on pushes and pull requests.
+
+## Deployment refresh
+
+This documentation-only commit triggers a new GitHub CI run and Railway auto-deploy from the latest `main` revision. It does not change bot functionality.
