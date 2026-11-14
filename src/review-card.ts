@@ -4,10 +4,10 @@ import { createRequire } from 'node:module';
 import opentype from 'opentype.js';
 const require=createRequire(import.meta.url);
 function loadFont(path:string){const bytes=readFileSync(path);return opentype.parse(Uint8Array.from(bytes).buffer);}
-const font=loadFont(require.resolve('@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff')));
-const fontBold=loadFont(require.resolve('@fontsource/noto-sans/files/noto-sans-latin-700-normal.woff')));
-const fontExt=loadFont(require.resolve('@fontsource/noto-sans/files/noto-sans-latin-ext-400-normal.woff')));
-const fontExtBold=loadFont(require.resolve('@fontsource/noto-sans/files/noto-sans-latin-ext-700-normal.woff')));
+const font=loadFont(require.resolve('@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff'));
+const fontBold=loadFont(require.resolve('@fontsource/noto-sans/files/noto-sans-latin-700-normal.woff'));
+const fontExt=loadFont(require.resolve('@fontsource/noto-sans/files/noto-sans-latin-ext-400-normal.woff'));
+const fontExtBold=loadFont(require.resolve('@fontsource/noto-sans/files/noto-sans-latin-ext-700-normal.woff'));
 function starShape(cx:number,cy:number,r:number,filled:boolean){const pts=Array.from({length:10},(_,i)=>{const a=-Math.PI/2+i*Math.PI/5;const radius=i%2?r*.46:r;return (cx+Math.cos(a)*radius).toFixed(2)+','+(cy+Math.sin(a)*radius).toFixed(2)}).join(' ');return '<polygon points="'+pts+'" fill="'+(filled?'#ffd16b':'none')+'" stroke="#ffd16b" stroke-width="2"/>';}
 function drawText(value:string,x:number,y:number,size:number,color:string,bold=false,anchor:'start'|'end'|'middle'='start'){
  const basic=bold?fontBold:font,extra=bold?fontExtBold:fontExt;
