@@ -19,5 +19,11 @@ export const commands = [
   .addSubcommand(s=>s.setName('unsubscribe').setDescription('Opt out of update DMs')),
  new SlashCommandBuilder().setName('ticket-config').setDescription('Nustatyti ticket transcript ir feedback kanalą').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .addChannelOption(o=>o.setName('feedback_channel').setDescription('Kanalas transcriptams ir įvertinimams').addChannelTypes(0).setRequired(true)),
+ new SlashCommandBuilder().setName('suggestion').setDescription('Pasiūlyk idėją su pasirenkama nuotrauka')
+  .addStringOption(o=>o.setName('idea').setDescription('Tavo pasiūlymas').setMinLength(5).setMaxLength(1800).setRequired(true))
+  .addAttachmentOption(o=>o.setName('image').setDescription('Pasirenkama nuotrauka / pavyzdys'))
+  .addStringOption(o=>o.setName('reason').setDescription('Kodėl tai būtų naudinga?').setMaxLength(800)),
+ new SlashCommandBuilder().setName('suggestion-config').setDescription('Nustatyti pasiūlymų kanalą').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .addChannelOption(o=>o.setName('channel').setDescription('Kur publikuoti pasiūlymus').addChannelTypes(0).setRequired(true)),
  new SlashCommandBuilder().setName('rank').setDescription('Show your activity XP')
 ].map(command=>command.toJSON());
