@@ -11,18 +11,19 @@ const fontExtBold=loadFont(require.resolve('@fontsource/noto-sans/files/noto-san
 function starShape(cx:number,cy:number,r:number,filled:boolean){const pts=Array.from({length:10},(_,i)=>{const a=-Math.PI/2+i*Math.PI/5;const radius=i%2?r*.46:r;return (cx+Math.cos(a)*radius).toFixed(2)+','+(cy+Math.sin(a)*radius).toFixed(2)}).join(' ');return '<polygon points="'+pts+'" fill="'+(filled?'#ffd16b':'none')+'" stroke="#ffd16b" stroke-width="2"/>';}
 function drawText(value:string,x:number,y:number,size:number,color:string,bold=false,anchor:'start'|'end'|'middle'='start'){
  const basic=bold?fontBold:font,extra=bold?fontExtBold:fontExt;
- const chars=Array.from(value);
- const widths=chars.map(c=>{const f=c.codePointAt(0)!>127?extra:basic;return f.getAdvanceWidth(c,size);});
+ const chars=Array.from(value).map(c=>c==='•'?' - ':c).join('').split('');
+ const selectFont=(c:string)=>{const preferred=c.codePointAt(0)!>127?extra:basic;return preferred.charToGlyph(c).index===0?basic:preferred;};
+ const widths=chars.map(c=>selectFont(c).getAdvanceWidth(c,size));
  const total=widths.reduce((a,b)=>a+b,0);
  let pos=x-(anchor==='end'?total:anchor==='middle'?total/2:0);
  let paths='';
- for(let i=0;i<chars.length;i++){const f=chars[i].codePointAt(0)!>127?extra:basic;paths+=f.getPath(chars[i],pos,y,size).toPathData(2);pos+=widths[i];}
+ for(let i=0;i<chars.length;i++){const f=selectFont(chars[i]);paths+=f.getPath(chars[i],pos,y,size).toPathData(2);pos+=widths[i];}
  return '<path fill="'+color+'" d="'+paths+'"/>';
 }
 
 
 const escapeXml=(value:string)=>value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
-const shorten=(value:string,max:number)=>value.length>max?value.slice(0,max-1)+'…':value;
+const shorten=(value:string,max:number)=>value.length>max?value.slice(0,max-3)+'...':value;
 export async function reviewCard(data:{name:string;staffName:string;rating:number;avatarUrl?:string|null;count:number;average:number;ticketName:string}):Promise<Buffer>{
  const width=1200,height=390;
  const grid=Array.from({length:31},(_,i)=>'<path d="M '+(i*40)+' 0 V 390" />').join('')+Array.from({length:11},(_,i)=>'<path d="M 0 '+(i*40)+' H 1200" />').join('');
@@ -33,17 +34,15 @@ export async function reviewCard(data:{name:string;staffName:string;rating:numbe
  <rect width="1200" height="390" rx="26" fill="#050505"/>
  <g stroke="#343434" stroke-width="1.2" opacity=".85">${grid}</g>
 
- ${drawText("Lextrum • Support Reviews",54,63,22,"#c6c6c6",false,"start")}
- ${drawText("Staff Review",1170,63,21,"#c6c6c6",false,"end")}
+ ${drawText("Lextrum - Support Reviews",54,63,22,"#c6c6c6",false,"start")}
  <circle cx="101" cy="159" r="50" fill="#2a2a2a"/>
  ${starShape(101,155,21,true)}
  ${drawText(`${escapeXml(shorten(data.name,22))}`,176,159,38,"#fff",true,"start")}
- ${drawText(`Įvertino pagalbą • ${escapeXml(shorten(data.ticketName,35))}`,176,195,21,"#bdbdbd",false,"start")}
+ ${drawText(`Įvertino pagalbą - ${escapeXml(shorten(data.ticketName,35))}`,176,195,21,"#bdbdbd",false,"start")}
  ${stars}
  ${drawText(`${data.rating} iš 5`,318,278,23,"#fff",false,"start")}
  ${drawText(`Įvertintas darbuotojas: ${escapeXml(shorten(data.staffName,32))}`,54,329,21,"#c6c6c6",false,"start")}
  <rect x="792" y="92" width="358" height="249" rx="25" fill="#171717"/>
- ${drawText("Staff average rating",826,139,20,"#c6c6c6",false,"start")}
  ${drawText(data.average.toFixed(1),826,218,72,"#fff",true)}
  ${averageStars}
  ${drawText(`Iš ${data.count} įvertinimų`,826,304,19,"#c6c6c6",false,"start")}
