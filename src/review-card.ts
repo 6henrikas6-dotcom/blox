@@ -12,7 +12,7 @@ function starShape(cx:number,cy:number,r:number,filled:boolean){const pts=Array.
 function drawText(value:string,x:number,y:number,size:number,color:string,bold=false,anchor:'start'|'end'|'middle'='start'){
  const basic=bold?fontBold:font,extra=bold?fontExtBold:fontExt;
  const chars=Array.from(value);
- const widths=chars.map(c=>(c.codePointAt(0)!>127?extra:basic).getAdvanceWidth(c,size));
+ const widths=chars.map(c=>{const f=c.codePointAt(0)!>127?extra:basic;return f.getAdvanceWidth(c,size);});
  const total=widths.reduce((a,b)=>a+b,0);
  let pos=x-(anchor==='end'?total:anchor==='middle'?total/2:0);
  let paths='';
@@ -30,24 +30,24 @@ export async function reviewCard(data:{name:string;staffName:string;rating:numbe
  const averageStars=Array.from({length:5},(_,i)=>starShape(843+i*44,245,17,i<Math.round(data.average))).join('');
  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="390" viewBox="0 0 1200 390">
  <defs><linearGradient id="shade" x2="1" y2="1"><stop stop-color="#10191b"/><stop offset="1" stop-color="#052a26"/></linearGradient><clipPath id="avatar"><circle cx="101" cy="159" r="49"/></clipPath></defs>
- <rect width="1200" height="390" rx="26" fill="url(#shade)"/>
- <g stroke="#5b6467" stroke-width="1.2" opacity=".42">${grid}</g>
- <rect width="1200" height="390" rx="26" fill="#002c26" opacity=".40"/>
- ${drawText("Lextrum • Support Reviews",54,63,22,"#b8d6d0",false,"start")}
- ${drawText("Staff Review",1170,63,21,"#b8d6d0",false,"end")}
- <circle cx="101" cy="159" r="50" fill="#158f83"/>
+ <rect width="1200" height="390" rx="26" fill="#050505"/>
+ <g stroke="#343434" stroke-width="1.2" opacity=".85">${grid}</g>
+
+ ${drawText("Lextrum • Support Reviews",54,63,22,"#c6c6c6",false,"start")}
+ ${drawText("Staff Review",1170,63,21,"#c6c6c6",false,"end")}
+ <circle cx="101" cy="159" r="50" fill="#2a2a2a"/>
  ${starShape(101,155,21,true)}
  ${drawText(`${escapeXml(shorten(data.name,22))}`,176,159,38,"#fff",true,"start")}
- ${drawText(`Įvertino pagalbą • ${escapeXml(shorten(data.ticketName,35))}`,176,195,21,"#b6d5d0",false,"start")}
+ ${drawText(`Įvertino pagalbą • ${escapeXml(shorten(data.ticketName,35))}`,176,195,21,"#bdbdbd",false,"start")}
  ${stars}
  ${drawText(`${data.rating} iš 5`,318,278,23,"#fff",false,"start")}
- ${drawText(`Įvertintas darbuotojas: ${escapeXml(shorten(data.staffName,32))}`,54,329,21,"#c5dbd5",false,"start")}
- <rect x="792" y="92" width="358" height="249" rx="25" fill="#ffffff" fill-opacity=".085"/>
- ${drawText("Staff average rating",826,139,20,"#c4ded8",false,"start")}
+ ${drawText(`Įvertintas darbuotojas: ${escapeXml(shorten(data.staffName,32))}`,54,329,21,"#c6c6c6",false,"start")}
+ <rect x="792" y="92" width="358" height="249" rx="25" fill="#171717"/>
+ ${drawText("Staff average rating",826,139,20,"#c6c6c6",false,"start")}
  ${drawText(data.average.toFixed(1),826,218,72,"#fff",true)}
  ${averageStars}
- ${drawText(`Iš ${data.count} įvertinimų`,826,304,19,"#c4ded8",false,"start")}
- <path d="M0 372 Q270 342 520 364 T1200 367" stroke="#1ae1a7" stroke-width="8" fill="none" opacity=".8"/>
+ ${drawText(`Iš ${data.count} įvertinimų`,826,304,19,"#c6c6c6",false,"start")}
+
  </svg>`;
  const base=sharp(Buffer.from(svg));
  if(!data.avatarUrl)return base.png().toBuffer();
