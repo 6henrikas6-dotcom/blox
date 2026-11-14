@@ -94,3 +94,29 @@ model GiveawayEntry {
  userId String
  @@id([giveawayId,userId])
 }
+
+model CommunityAutomation {
+ guildId String @id
+ welcomeChannelId String?
+ goodbyeChannelId String?
+ inviteLogChannelId String?
+ levelChannelId String?
+ welcomeMessage String @default("👋 Sveikas atvykęs, {user}! Tu esi {count}-asis narys.")
+ goodbyeMessage String @default("👋 {username} paliko serverį.")
+ levelMessage String @default("🎉 {user} pasiekė {level} lygį!")
+ xpEnabled Boolean @default(true)
+ xpPerMessage Int @default(5)
+ xpCooldownSeconds Int @default(60)
+ levelUpEnabled Boolean @default(true)
+ inviteTrackingEnabled Boolean @default(true)
+ updatedAt DateTime @updatedAt
+}
+model MemberInvite {
+ guildId String
+ userId String
+ inviterId String?
+ inviteCode String?
+ joinedAt DateTime @default(now())
+ @@id([guildId,userId])
+ @@index([guildId,inviterId])
+}
