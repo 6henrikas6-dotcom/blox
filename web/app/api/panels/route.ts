@@ -11,6 +11,8 @@ export async function POST(req:NextRequest){
  const data={mode:str('mode'),channelId:str('channelId'),roleId:str('roleId'),categoryId:str('categoryId'),message:str('message'),title:str('title'),color:str('color'),footer:str('footer'),imageUrl:str('imageUrl'),thumbnailUrl:str('thumbnailUrl')};
  const image=form.get('image');
  let sections:{name:string;value:string;inline?:boolean}[]=[];
+ let buttons:{label:string;style:number;emoji:string;url:string}[]=[];
+ try{const raw=str('buttons');if(raw){const arr:unknown=JSON.parse(raw);if(!Array.isArray(arr)||arr.length>5)throw Error();buttons=arr.map((v:unknown)=>{if(!v||typeof v!=='object')throw Error();const x=v as Record<string,unknown>;if(typeof x.label!=='string'||x.label.length>80||typeof x.style!=='number'||![1,2,3,4,5].includes(x.style)||typeof x.emoji!=='string'||x.emoji.length>100||typeof x.url!=='string')throw Error();if(x.style===5){const u=new URL(x.url);if(u.protocol!=='https:'||u.username||u.password||x.url.length>512)throw Error();}return {label:x.label,style:x.style,emoji:x.emoji,url:x.url};});}}catch{return NextResponse.json({error:'Patikrink mygtukų tekstą, spalvą ir HTTPS nuorodas'},{status:400});}
  let ticketOptions:{label:string;description:string;emoji:string}[]=[];
  try{const raw=str('ticketOptions');if(raw){const parsed:unknown=JSON.parse(raw);if(!Array.isArray(parsed)||parsed.length<1||parsed.length>20)throw Error('invalid');ticketOptions=parsed.map((v:unknown)=>{if(!v||typeof v!=='object')throw Error('invalid');const x=v as Record<string,unknown>;if(typeof x.label!=='string'||!x.label.trim()||x.label.length>70||typeof x.description!=='string'||x.description.length>100||typeof x.emoji!=='string'||x.emoji.length>8)throw Error('invalid');return {label:x.label.trim(),description:x.description.trim(),emoji:x.emoji.trim()};});if(new Set(ticketOptions.map(x=>x.label)).size!==ticketOptions.length)throw Error('duplicates');}}catch{return NextResponse.json({error:'Patikrink ticket pasirinkimus (1–20, unikalūs pavadinimai)'},{status:400});}
  try{const raw=str('sections');if(raw){const parsed:unknown=JSON.parse(raw);if(!Array.isArray(parsed)||parsed.length>12)throw Error('invalid');sections=parsed.map((v:unknown)=>{if(!v||typeof v!=='object')throw Error('invalid');const x=v as Record<string,unknown>;if(typeof x.name!=='string'||typeof x.value!=='string'||x.name.length>256||x.value.length>1024)throw Error('invalid');return {name:x.name.trim(),value:x.value.trim(),inline:x.inline===true};}).filter(x=>x.name&&x.value);}}catch{return NextResponse.json({error:'Neteisingos embed sekcijos'},{status:400});}
@@ -38,8 +40,14 @@ export async function POST(req:NextRequest){
   if(data.thumbnailUrl)embed.thumbnail={url:data.thumbnailUrl};
   if(image instanceof File)embed.image={url:'attachment://'+(image.type==='image/png'?'panel.png':image.type==='image/jpeg'?'panel.jpg':image.type==='image/webp'?'panel.webp':'panel.gif')};
   else if(data.imageUrl)embed.image={url:data.imageUrl};
+  const parseEmoji=(value:string)=>{const m=value.match(/^<(a?):([A-Za-z0-9_]+):(\\d{17,20})>$/);return m?{id:m[3],name:m[2],animated:m[1]==='a'}:value?{name:value}:undefined;};
   const selector=mode==='ticket'&&ticketOptions.length>0;
-  const components=selector?[{type:1,components:[{type:3,custom_id:'dg_ticket_select',placeholder:'Choose your option down below',min_values:1,max_values:1,options:ticketOptions.map(o=>({label:o.label,value:o.label,description:o.description,...(o.emoji&&/\p{Extended_Pictographic}/u.test(o.emoji)?{emoji:{name:o.emoji}}:{})}))}]}]:[{type:1,components:[{type:2,style:mode==='verify'?3:1,label:mode==='verify'?'Verify':'Create Ticket',custom_id:mode==='verify'?'dg_verify':'dg_ticket_open'}]}];
+  const defaultId=mode==='verify'?'dg_verify':'dg_ticket_open';
+  const selected=buttons.length?buttons:[{label:mode==='verify'?'Verify':'Create Ticket',style:mode==='verify'?3:1,emoji:'',url:''}];
+  const actions=selected.map(b=>({type:2,style:b.style,...(b.label?{label:b.label}:{}),...(parseEmoji(b.emoji)?{emoji:parseEmoji(b.emoji)}:{}),...(b.style===5?{url:b.url}:{custom_id:defaultId})}));
+  const components:unknown[]=[];
+  if(selector)components.push({type:1,components:[{type:3,custom_id:'dg_ticket_select',placeholder:'Choose your option down below',min_values:1,max_values:1,options:ticketOptions.map(o=>({label:o.label,value:o.label,description:o.description,...(parseEmoji(o.emoji)?{emoji:parseEmoji(o.emoji)}:{})}))}]});
+  if(!selector||buttons.length)components.push({type:1,components:actions});
   const payload={embeds:[embed],components,allowed_mentions:{parse:[]}};
   const multipart=new FormData();multipart.set('payload_json',JSON.stringify(payload));
   if(image instanceof File){const ext=image.type==='image/png'?'png':image.type==='image/jpeg'?'jpg':image.type==='image/webp'?'webp':'gif';multipart.set('files[0]',image,'panel.'+ext);}
