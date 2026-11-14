@@ -62,7 +62,7 @@ async function lockdown(guildId:string,enable:boolean,actor:string){
   await db.guildConfig.update({where:{guildId},data:{lockdown:enable}});
   await audit(guildId,enable?'LOCKDOWN':'UNLOCK',actor);
 }
-client.once(Events.ClientReady,c=>log.info({bot:c.user.tag},'Bot online'));
+client.once(Events.ClientReady,c=>log.info({bot:c.user.tag,release:'ticket-forms-and-claim-v2'},'Bot online'));
 client.on(Events.GuildMemberAdd,async member=>{
   try{
     const now=Date.now(),guildId=member.guild.id;
