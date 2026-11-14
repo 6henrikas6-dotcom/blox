@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
-import { Client, GatewayIntentBits, Events, PermissionFlagsBits, ChannelType, EmbedBuilder, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { Client, GatewayIntentBits, Events, PermissionFlagsBits, ChannelType, EmbedBuilder, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder } from 'discord.js';
 import pino from 'pino';
 import { REST, Routes } from 'discord.js';
 import { commands } from './commands.js';
@@ -145,8 +145,8 @@ client.on(Events.InteractionCreate,async interaction=>{
 });
 
 client.on(Events.InteractionCreate,async interaction=>{
- if((!interaction.isButton()&&!interaction.isStringSelectMenu())||!interaction.inGuild())return;
- if(!['dg_verify','dg_ticket_open','dg_ticket_close','dg_ticket_select'].includes(interaction.customId))return;
+ if((!interaction.isButton()&&!interaction.isStringSelectMenu()&&!interaction.isModalSubmit())||!interaction.inGuild())return;
+ if(!['dg_verify','dg_ticket_open','dg_ticket_close','dg_ticket_select','dg_ticket_claim'].includes(interaction.customId)&&!interaction.customId.startsWith('dg_ticket_form:'))return;
  try{
   const guild=interaction.guild!,guildId=guild.id,userId=interaction.user.id;
   const cfg=await db.communityPanel.findUnique({where:{guildId}});
@@ -164,6 +164,19 @@ client.on(Events.InteractionCreate,async interaction=>{
   if(interaction.customId==='dg_ticket_open'||interaction.customId==='dg_ticket_select'){
    const ticketType=interaction.isStringSelectMenu()?interaction.values[0]:null;
    if(ticketType&&(!ticketType.trim()||ticketType.length>70)){await interaction.reply({content:'Netinkamas ticket pasirinkimas.',flags:MessageFlags.Ephemeral});return;}
+   const existing=await db.supportTicket.findFirst({where:{guildId,userId,status:'open'}});
+   if(existing){await interaction.reply({content:'Jau turi atidarytą ticketą: <#'+existing.channelId+'>',flags:MessageFlags.Ephemeral});return;}
+   const type=encodeURIComponent(ticketType??'General');
+   const modal=new ModalBuilder().setCustomId('dg_ticket_form:'+type).setTitle('Lextrum Support • '+(ticketType??'General').slice(0,22));
+   modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('subject').setLabel('Kuo galime padėti?').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(150)),new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('details').setLabel('Aprašyk problemą arba klausimą').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1800)));
+   await interaction.showModal(modal);return;
+  }
+  if(interaction.customId.startsWith('dg_ticket_form:')){
+   if(!interaction.isModalSubmit())return;
+   const ticketType=decodeURIComponent(interaction.customId.slice('dg_ticket_form:'.length));
+   if(!ticketType||ticketType.length>70){await interaction.reply({content:'Netinkama kategorija',flags:MessageFlags.Ephemeral});return;}
+   const subject=interaction.fields.getTextInputValue('subject');
+   const details=interaction.fields.getTextInputValue('details');
    if(!cfg.ticketCategoryId){await interaction.reply({content:'Ticket kategorija nenustatyta.',flags:MessageFlags.Ephemeral});return;}
    await interaction.deferReply({flags:MessageFlags.Ephemeral});
    const existing=await db.supportTicket.findFirst({where:{guildId,userId,status:'open'}});
@@ -178,8 +191,8 @@ client.on(Events.InteractionCreate,async interaction=>{
    if(cfg.supportRoleId)overwrites.push({id:cfg.supportRoleId,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]});
    const channel=await guild.channels.create({name:(ticketType?ticketType.toLowerCase().normalize('NFKD').replace(/[^a-z0-9-]/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,32)+'-':'ticket-')+userId.slice(-6),type:ChannelType.GuildText,parent:cfg.ticketCategoryId,permissionOverwrites:overwrites,reason:'DevGuard support ticket'});
    try{await db.supportTicket.create({data:{guildId,userId,channelId:channel.id}});}catch(e){await channel.delete().catch(()=>{});throw e;}
-   const row=new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('dg_ticket_close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger));
-   await channel.send({content:(ticketType?'**'+ticketType.replace(/[*_~`\\]/g,'')+'** • ':'Support ticket • ')+'<@'+userId+'>' +(cfg.supportRoleId?' <@&'+cfg.supportRoleId+'>':''),components:[row],allowedMentions:{users:[userId],roles:cfg.supportRoleId?[cfg.supportRoleId]:[]}});
+   const row=new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('dg_ticket_claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('dg_ticket_close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger));
+   await channel.send({content:'🎫 **'+ticketType.replace(/[*_~`\\]/g,'')+'** • <@'+userId+'> '+(cfg.supportRoleId?'<@&'+cfg.supportRoleId+'>':''),embeds:[new EmbedBuilder().setTitle(subject).setDescription(details).setColor(0x8066f2)],components:[row],allowedMentions:{users:[userId],roles:cfg.supportRoleId?[cfg.supportRoleId]:[]}});
    await interaction.editReply('Ticketas sukurtas: <#'+channel.id+'>');
    await audit(guildId,'TICKET_OPEN',userId,(ticketType?ticketType+' • ':'')+channel.id);
    return;
@@ -188,7 +201,28 @@ client.on(Events.InteractionCreate,async interaction=>{
   if(!ticket||ticket.status!=='open'){await interaction.reply({content:'Ticketas nerastas arba uždarytas.',flags:MessageFlags.Ephemeral});return;}
   const member=await guild.members.fetch(userId);
   if(ticket.userId!==userId&&!member.permissions.has(PermissionFlagsBits.ManageChannels)&&(!cfg.supportRoleId||!member.roles.cache.has(cfg.supportRoleId))){await interaction.reply({content:'Neturi teisės uždaryti šio ticketo.',flags:MessageFlags.Ephemeral});return;}
+  if(interaction.customId==='dg_ticket_claim'){
+   if(!member.permissions.has(PermissionFlagsBits.ManageChannels)&&(!cfg.supportRoleId||!member.roles.cache.has(cfg.supportRoleId))){await interaction.reply({content:'Tik support komanda gali priskirti ticketą.',flags:MessageFlags.Ephemeral});return;}
+   const ch=interaction.channel;
+   if(!ch||ch.type!==ChannelType.GuildText){await interaction.reply({content:'Neteisingas kanalas',flags:MessageFlags.Ephemeral});return;}
+   if(ch.topic?.startsWith('Claimed by ')){await interaction.reply({content:ch.topic,flags:MessageFlags.Ephemeral});return;}
+   await ch.setTopic('Claimed by '+interaction.user.username+' ('+userId+')');
+   await interaction.reply({content:'Ticketas priskirtas tau.',flags:MessageFlags.Ephemeral});
+   await ch.send({content:'🛠️ Ticketą perėmė <@'+userId+'>',allowedMentions:{users:[userId]}});
+   await audit(guildId,'TICKET_CLAIM',userId,ch.id);return;
+  }
   await interaction.reply({content:'Ticketas uždaromas.',flags:MessageFlags.Ephemeral});
+  try{
+   const ch=interaction.channel;
+   if(ch&&ch.isTextBased()&&'messages' in ch){
+    const messages=await ch.messages.fetch({limit:100});
+    const lines=[...messages.values()].sort((a,b)=>a.createdTimestamp-b.createdTimestamp).map(m=>new Date(m.createdTimestamp).toISOString()+' '+m.author.tag+': '+m.content+' '+m.attachments.map(a=>a.url).join(' '));
+    const file=new AttachmentBuilder(Buffer.from(lines.join('\\n')||'No messages','utf8'),{name:'ticket-'+ticket.id+'.txt'});
+    const logCfg=await db.guildConfig.findUnique({where:{guildId}});
+    if(logCfg?.logChannelId){const logs=await guild.channels.fetch(logCfg.logChannelId).catch(()=>null);if(logs?.isTextBased()&&'send' in logs)await logs.send({content:'📄 Ticket transcript • '+ticket.channelId+' • closed by <@'+userId+'>',files:[file],allowedMentions:{parse:[]}});}
+   }
+  }catch(e){log.error(e,'Transcript export failed');}
+
   await db.supportTicket.update({where:{id:ticket.id},data:{status:'closed',closedAt:new Date()}});
   await audit(guildId,'TICKET_CLOSE',userId,ticket.channelId);
   await interaction.channel?.delete().catch(e=>log.error(e,'Ticket channel delete failed'));
