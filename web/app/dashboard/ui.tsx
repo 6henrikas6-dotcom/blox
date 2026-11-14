@@ -4,7 +4,7 @@ type Props={user:{id:string;username:string};guildName:string;memberCount:number
 
 type PanelButton={label:string;style:number;emoji:string;url:string};
 const defaultButton=(label:string,style:number,emoji:string):PanelButton=>({label,style,emoji,url:''});
-function emojiDisplay(value:string){const m=value.match(/^<a?:([^:]+):(\\d+)>$/);return m?'🔹 '+m[1]:value;}
+function emojiDisplay(value:string){const m=value.match(/^<a?:([^:]+):(\d+)>$/);return m?'🔹 '+m[1]:value;}
 function buttonCss(style:number){return {background:style===3?'#248046':style===4?'#da373c':style===2||style===5?'#4e5058':'#5865f2',color:'#fff',padding:'9px 15px',borderRadius:5,fontWeight:600,display:'inline-block',margin:'4px 5px 4px 0'};}
 export default function DashboardClient({user,guildName,memberCount,config,channels,categories,roles,events,emojis}:Props){
  const [tab,setTab]=useState('overview');
