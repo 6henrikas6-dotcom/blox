@@ -23,3 +23,25 @@ model AuditEvent {
   createdAt DateTime @default(now())
   @@index([guildId, createdAt])
 }
+
+model CommunityPanel {
+  guildId String @id
+  verifyChannelId String?
+  verifiedRoleId String?
+  verifyMessage String @default("Paspausk Verify, kad gautum prieigą prie serverio.")
+  ticketChannelId String?
+  ticketCategoryId String?
+  supportRoleId String?
+  ticketMessage String @default("Reikia pagalbos? Atidaryk ticketą.")
+  updatedAt DateTime @updatedAt
+}
+model SupportTicket {
+  id String @id @default(cuid())
+  guildId String
+  userId String
+  channelId String @unique
+  status String @default("open")
+  createdAt DateTime @default(now())
+  closedAt DateTime?
+  @@index([guildId,userId,status])
+}
