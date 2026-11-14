@@ -13,7 +13,10 @@ export const commands = [
   .addSubcommand(s=>s.setName('timeout').setDescription('Timeout a member').addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true)).addIntegerOption(o=>o.setName('minutes').setDescription('1 to 40320').setMinValue(1).setMaxValue(40320).setRequired(true)).addStringOption(o=>o.setName('reason').setDescription('Reason'))),
  new SlashCommandBuilder().setName('announce').setDescription('Publish a product update').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .addStringOption(o=>o.setName('title').setDescription('Title').setMaxLength(256).setRequired(true))
-  .addStringOption(o=>o.setName('body').setDescription('Announcement text').setMaxLength(4000).setRequired(true)),
+  .addStringOption(o=>o.setName('body').setDescription('Announcement text').setMaxLength(4000).setRequired(true))
+  .addBooleanOption(o=>o.setName('everyone').setDescription('Mention @everyone (requires Mention Everyone permission)'))
+  .addRoleOption(o=>o.setName('role').setDescription('Role to mention in announcement')),
+
  new SlashCommandBuilder().setName('updates').setDescription('Manage update DM subscriptions')
   .addSubcommand(s=>s.setName('subscribe').setDescription('Opt in to future update DMs'))
   .addSubcommand(s=>s.setName('unsubscribe').setDescription('Opt out of update DMs')),
