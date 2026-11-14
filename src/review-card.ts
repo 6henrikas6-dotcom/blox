@@ -35,6 +35,7 @@ export async function reviewCard(data:{name:string;staffName:string;rating:numbe
  <g stroke="#343434" stroke-width="1.2" opacity=".85">${grid}</g>
 
  ${drawText("Lextrum - Support Reviews",54,63,22,"#c6c6c6",false,"start")}
+ ${drawText("Staff Review",1170,63,21,"#c6c6c6",false,"end")}
  <circle cx="101" cy="159" r="50" fill="#2a2a2a"/>
  ${starShape(101,155,21,true)}
  ${drawText(`${escapeXml(shorten(data.name,22))}`,176,159,38,"#fff",true,"start")}
@@ -43,6 +44,7 @@ export async function reviewCard(data:{name:string;staffName:string;rating:numbe
  ${drawText(`${data.rating} iš 5`,318,278,23,"#fff",false,"start")}
  ${drawText(`Įvertintas darbuotojas: ${escapeXml(shorten(data.staffName,32))}`,54,329,21,"#c6c6c6",false,"start")}
  <rect x="792" y="92" width="358" height="249" rx="25" fill="#171717"/>
+ ${drawText("Staff average rating",826,139,20,"#c6c6c6",false,"start")}
  ${drawText(data.average.toFixed(1),826,218,72,"#fff",true)}
  ${averageStars}
  ${drawText(`Iš ${data.count} įvertinimų`,826,304,19,"#c6c6c6",false,"start")}
