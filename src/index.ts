@@ -5,6 +5,7 @@ import pino from 'pino';
 import { REST, Routes } from 'discord.js';
 import { commands } from './commands.js';
 import { reviewCard } from './review-card.js';
+import { welcomeCard } from './welcome-card.js';
 
 const {DISCORD_TOKEN,DATABASE_URL}=process.env;
 if(!DISCORD_TOKEN || !DATABASE_URL) throw new Error('Missing DISCORD_TOKEN or DATABASE_URL');
@@ -82,7 +83,13 @@ client.on(Events.GuildMemberAdd,async member=>{
       await db.memberInvite.upsert({where:{guildId_userId:{guildId,userId:member.id}},create:{guildId,userId:member.id,inviterId,inviteCode},update:{inviterId,inviteCode,joinedAt:new Date()}});
       if(auto?.inviteLogChannelId)await sendTo(guildId,auto.inviteLogChannelId,'🔗 '+member.user.username+' joined • inviter: '+(inviterId?'<@'+inviterId+'>':'unknown')+' • code: '+(inviteCode??'unknown'));
     }
-    if(auto?.welcomeChannelId)await sendTo(guildId,auto.welcomeChannelId,renderMessage(auto.welcomeMessage,{user:member.user.username,username:member.user.username,count:String(member.guild.memberCount),inviter:inviterId??'unknown',level:'0',invites:'0'}));
+    if(auto?.welcomeChannelId){
+      const welcomeChannel=await member.guild.channels.fetch(auto.welcomeChannelId).catch(()=>null);
+      if(welcomeChannel?.isTextBased() && 'send' in welcomeChannel){
+        const card=await welcomeCard(member.displayName,member.guild.memberCount,member.user.displayAvatarURL({extension:'png',size:256}));
+        await welcomeChannel.send({files:[new AttachmentBuilder(card,{name:'lextrum-welcome.png'})]});
+      }
+    }
     if(member.user.createdTimestamp>now-3*86400_000)await audit(guildId,'NEW_ACCOUNT',member.id);
   }catch(e){log.error(e,'Join handler');}
 });
