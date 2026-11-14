@@ -12,6 +12,18 @@ const log=pino({level:process.env.LOG_LEVEL??'info'});
 const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMembers,GatewayIntentBits.GuildMessages,GatewayIntentBits.MessageContent]});
 const joins=new Map<string,number[]>();
 const cooldown=new Map<string,number>();
+const inviteCache=new Map<string,Map<string,{uses:number;inviterId:string|null}>>();
+async function refreshInvites(guildId:string){
+ const guild=await client.guilds.fetch(guildId);
+ try{const invites=await guild.invites.fetch();const result=new Map<string,{uses:number;inviterId:string|null}>();for(const inv of invites.values())result.set(inv.code,{uses:inv.uses??0,inviterId:inv.inviterId??null});return result;}catch(e){log.warn({guildId,error:e},'Invite tracking requires Manage Guild permission');return null;}
+}
+function renderMessage(template:string,values:Record<string,string>){return template.replace(/\{(user|username|count|inviter|level|invites)\}/g,(_,key:string)=>values[key]??'unknown').slice(0,1900);}
+async function sendTo(guildId:string,channelId:string|null|undefined,content:string){if(!channelId)return;const ch=await client.guilds.cache.get(guildId)?.channels.fetch(channelId).catch(()=>null);if(ch?.isTextBased()&&'send' in ch)await ch.send({content,allowedMentions:{parse:[]}}).catch(e=>log.warn(e,'Could not send community message'));}
+const xpLevel=(points:number)=>Math.floor(Math.sqrt(Math.max(0,points)/100));
+client.once(Events.ClientReady,async()=>{for(const guild of client.guilds.cache.values()){const codes=await refreshInvites(guild.id);if(codes)inviteCache.set(guild.id,codes);}});
+client.on(Events.InviteCreate,async invite=>{if(!invite.guild)return;const codes=await refreshInvites(invite.guild.id);if(codes)inviteCache.set(invite.guild.id,codes);});
+client.on(Events.InviteDelete,async invite=>{if(!invite.guild)return;const codes=await refreshInvites(invite.guild.id);if(codes)inviteCache.set(invite.guild.id,codes);});
+
 async function audit(guildId:string,event:string,actorId?:string,detail?:string){
   await db.auditEvent.create({data:{guildId,event,actorId,detail}});
   const cfg=await db.guildConfig.findUnique({where:{guildId}});
@@ -60,8 +72,21 @@ client.on(Events.GuildMemberAdd,async member=>{
       await audit(guildId,'RAID_ALERT',undefined,`${recent.length} members joined within one minute`);
       await lockdown(guildId,true,'system');
     }
+    const auto=await db.communityAutomation.findUnique({where:{guildId}});
+    let inviterId:string|null=null;let inviteCode:string|null=null;
+    if(auto?.inviteTrackingEnabled!==false){
+      const previous=inviteCache.get(guildId);
+      const current=await refreshInvites(guildId);
+      if(current){if(previous){const used=[...current.entries()].find(([code,entry])=>entry.uses>(previous.get(code)?.uses??0));if(used){inviteCode=used[0];inviterId=used[1].inviterId;}}inviteCache.set(guildId,current);}
+      await db.memberInvite.upsert({where:{guildId_userId:{guildId,userId:member.id}},create:{guildId,userId:member.id,inviterId,inviteCode},update:{inviterId,inviteCode,joinedAt:new Date()}});
+      if(auto?.inviteLogChannelId)await sendTo(guildId,auto.inviteLogChannelId,'🔗 '+member.user.username+' joined • inviter: '+(inviterId?'<@'+inviterId+'>':'unknown')+' • code: '+(inviteCode??'unknown'));
+    }
+    if(auto?.welcomeChannelId)await sendTo(guildId,auto.welcomeChannelId,renderMessage(auto.welcomeMessage,{user:member.user.username,username:member.user.username,count:String(member.guild.memberCount),inviter:inviterId??'unknown',level:'0',invites:'0'}));
     if(member.user.createdTimestamp>now-3*86400_000)await audit(guildId,'NEW_ACCOUNT',member.id);
   }catch(e){log.error(e,'Join handler');}
+});
+client.on(Events.GuildMemberRemove,async member=>{
+ try{const auto=await db.communityAutomation.findUnique({where:{guildId:member.guild.id}});if(auto?.goodbyeChannelId)await sendTo(member.guild.id,auto.goodbyeChannelId,renderMessage(auto.goodbyeMessage,{user:member.user.username,username:member.user.username,count:String(member.guild.memberCount),inviter:'unknown',level:'0',invites:'0'}));await audit(member.guild.id,'MEMBER_LEFT',member.id);}catch(e){log.error(e,'Leave handler');}
 });
 client.on(Events.MessageCreate,async message=>{
   if(!message.inGuild()||message.author.bot)return;
@@ -72,9 +97,14 @@ client.on(Events.MessageCreate,async message=>{
       return;
     }
     const key=`${message.guildId}:${message.author.id}`,now=Date.now();
-    if(now-(cooldown.get(key)??0)<60_000)return;
+    const auto=await db.communityAutomation.findUnique({where:{guildId:message.guildId}});if(auto?.xpEnabled===false)return;
+    if(now-(cooldown.get(key)??0)<(auto?.xpCooldownSeconds??60)*1000)return;
     cooldown.set(key,now);
-    await db.xp.upsert({where:{guildId_userId:{guildId:message.guildId,userId:message.author.id}},create:{guildId:message.guildId,userId:message.author.id,points:5},update:{points:{increment:5},lastEarnedAt:new Date()}});
+    const points=auto?.xpPerMessage??5;
+    const old=await db.xp.findUnique({where:{guildId_userId:{guildId:message.guildId,userId:message.author.id}}});
+    const next=await db.xp.upsert({where:{guildId_userId:{guildId:message.guildId,userId:message.author.id}},create:{guildId:message.guildId,userId:message.author.id,points},update:{points:{increment:points},lastEarnedAt:new Date()}});
+    const level=xpLevel(next.points);
+    if(auto?.levelUpEnabled!==false&&level>xpLevel(old?.points??0)&&level>0){await sendTo(message.guildId,auto?.levelChannelId??message.channelId,renderMessage(auto?.levelMessage??'🎉 {user} pasiekė {level} lygį!',{user:message.author.username,username:message.author.username,level:String(level),count:'0',inviter:'unknown',invites:'0'}));await audit(message.guildId,'LEVEL_UP',message.author.id,String(level));}
   }catch(e){log.error(e,'Message handler');}
 });
 client.on(Events.InteractionCreate,async interaction=>{
