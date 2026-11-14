@@ -21,7 +21,7 @@ export async function POST(req:NextRequest){
   if(!channels.some(c=>c.id===channelId&&(c.type===0||c.type===5)))return NextResponse.json({error:'Pasirink Discord teksto kanalą'},{status:400});
   if(mode==='ticket'&&!channels.some(c=>c.id===categoryId&&c.type===4))return NextResponse.json({error:'Pasirink tinkamą ticket kategoriją'},{status:400});
   const roles=await discord('/guilds/'+guildId+'/roles') as {id:string;permissions:string;managed:boolean}[];
-  const role=roles.find(r=>r.id===roleId);if(!role||role.managed||((BigInt(role.permissions)&(8n|32n|268435456n|2n|4n))!==0n))return NextResponse.json({error:'Pasirink paprastą, ne administratoriaus rolę'},{status:400});
+  const role=roles.find(r=>r.id===roleId);if(!role||role.managed||((BigInt(role.permissions)&(BigInt(8)|BigInt(32)|BigInt(268435456)|BigInt(2)|BigInt(4)))!==BigInt(0)))return NextResponse.json({error:'Pasirink paprastą, ne administratoriaus rolę'},{status:400});
   await db.communityPanel.update({where:{guildId},data:update});
   await discord('/channels/'+channelId+'/messages',{method:'POST',body:JSON.stringify({embeds:[{title:mode==='verify'?'Server Verification':'Support Tickets',description:message,color:10189055}],components:[{type:1,components:[{type:2,style:mode==='verify'?3:1,label:mode==='verify'?'Verify':'Create Ticket',custom_id:mode==='verify'?'dg_verify':'dg_ticket_open'}]}],allowed_mentions:{parse:[]}})});
   await db.auditEvent.create({data:{guildId,actorId:user.id,event:mode==='verify'?'VERIFY_PANEL_PUBLISHED':'TICKET_PANEL_PUBLISHED',detail:String(channelId)}});
