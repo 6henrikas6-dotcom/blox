@@ -121,6 +121,31 @@ client.on(Events.InteractionCreate,async interaction=>{
       await db.communityPanel.upsert({where:{guildId:id},create:{guildId:id,feedbackChannelId:channel.id},update:{feedbackChannelId:channel.id}});
       await interaction.reply({content:'⭐ Transcript ir feedback kanalas nustatytas: <#'+channel.id+'>',flags:MessageFlags.Ephemeral});return;
     }
+    if(cmd==='suggestion-config'){
+      if(!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){await interaction.reply({content:'Reikia Manage Server leidimo.',flags:MessageFlags.Ephemeral});return;}
+      const channel=interaction.options.getChannel('channel',true);
+      await db.guildConfig.upsert({where:{guildId:id},create:{guildId:id,suggestionChannelId:channel.id},update:{suggestionChannelId:channel.id}});
+      await interaction.reply({content:'💡 Pasiūlymų kanalas nustatytas: <#'+channel.id+'>',flags:MessageFlags.Ephemeral});return;
+    }
+    if(cmd==='suggestion'){
+      const cfg=await db.guildConfig.findUnique({where:{guildId:id}});
+      if(!cfg?.suggestionChannelId){await interaction.reply({content:'Administratorius turi nustatyti kanalą per /suggestion-config.',flags:MessageFlags.Ephemeral});return;}
+      const idea=interaction.options.getString('idea',true).trim();
+      const reason=interaction.options.getString('reason')?.trim();
+      const attachment=interaction.options.getAttachment('image');
+      if(attachment&&(!attachment.contentType?.startsWith('image/')||attachment.size>8_000_000)){await interaction.reply({content:'Pridėk paveikslėlį iki 8 MB (PNG, JPG, GIF ir kt.).',flags:MessageFlags.Ephemeral});return;}
+      const channel=await guild.channels.fetch(cfg.suggestionChannelId).catch(()=>null);
+      if(!channel||channel.type!==ChannelType.GuildText){await interaction.reply({content:'Pasiūlymų kanalas nerastas arba neprieinamas.',flags:MessageFlags.Ephemeral});return;}
+      await interaction.deferReply({flags:MessageFlags.Ephemeral});
+      const embed=new EmbedBuilder().setTitle('💡 Naujas pasiūlymas').setDescription(idea).addFields({name:'Autorius',value:'<@'+interaction.user.id+'>'}).setColor(0x8066f2).setTimestamp().setFooter({text:'👍 Pritariu • 👎 Nepritariu'});
+      if(reason)embed.addFields({name:'Kodėl?',value:reason});
+      if(attachment)embed.setImage(attachment.url);
+      const posted=await channel.send({embeds:[embed],allowedMentions:{parse:[]}});
+      await Promise.allSettled([posted.react('👍'),posted.react('👎')]);
+      await db.auditEvent.create({data:{guildId:id,event:'SUGGESTION',actorId:interaction.user.id,detail:posted.id}});
+      await interaction.editReply('💡 Pasiūlymas paskelbtas: '+posted.url);
+      return;
+    }
     if(cmd==='ping'){await interaction.reply({content:'Pong! Bot is online.',flags:MessageFlags.Ephemeral});return;}
     if(cmd==='setup'){
       const logChannelId=interaction.options.getChannel('log_channel')?.id??null;
