@@ -153,6 +153,8 @@ client.on(Events.InteractionCreate,async interaction=>{
   if(!cfg){await interaction.reply({content:'Sistema dar nesukonfigūruota.',flags:MessageFlags.Ephemeral});return;}
   if(interaction.customId==='dg_verify'){
    if(!cfg.verifiedRoleId){await interaction.reply({content:'Verify rolė nenustatyta.',flags:MessageFlags.Ephemeral});return;}
+   const role=await guild.roles.fetch(cfg.verifiedRoleId);
+   if(!role||role.managed||role.permissions.has([PermissionFlagsBits.Administrator,PermissionFlagsBits.ManageGuild,PermissionFlagsBits.ManageRoles,PermissionFlagsBits.BanMembers,PermissionFlagsBits.KickMembers])){await interaction.reply({content:'Verify rolė netinkama.',flags:MessageFlags.Ephemeral});return;}
    const member=await guild.members.fetch(userId);
    await member.roles.add(cfg.verifiedRoleId,'DevGuard verification');
    await interaction.reply({content:'Patvirtinta! Rolė suteikta.',flags:MessageFlags.Ephemeral});
