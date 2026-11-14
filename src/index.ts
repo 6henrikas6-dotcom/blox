@@ -205,7 +205,7 @@ client.on(Events.InteractionCreate,async interaction=>{
    const existing=await db.supportTicket.findFirst({where:{guildId,userId,status:'open'}});
    if(existing){await interaction.reply({content:'Jau turi atidarytą ticketą: <#'+existing.channelId+'>',flags:MessageFlags.Ephemeral});return;}
    const row=new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('dg_ticket_confirm:'+encodeURIComponent(ticketType)).setLabel('Tęsti / Continue').setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId('dg_ticket_cancel').setLabel('Atšaukti / Cancel').setStyle(ButtonStyle.Secondary));
-   await interaction.reply({content:'🎫 **'+ticketType+'**\\nPrieš atidarant ticketą reikės užpildyti pagalbos formą. Ar nori tęsti?',components:[row],flags:MessageFlags.Ephemeral});return;
+   await interaction.reply({content:'🎫 **'+ticketType+'**\nPrieš atidarant ticketą reikės užpildyti pagalbos formą. Ar nori tęsti?',components:[row],flags:MessageFlags.Ephemeral});return;
   }
   if(interaction.customId.startsWith('dg_ticket_confirm:')){
    if(!interaction.isButton())return;
@@ -240,7 +240,7 @@ client.on(Events.InteractionCreate,async interaction=>{
    const fields=(questions?.length?questions:[{label:'Priežastis / Reason',style:'short',required:true},{label:'Aprašyk problemą / Details',style:'paragraph',required:true}]).slice(0,5);
    const answers=fields.map((q,i)=>({name:q.label,value:interaction.fields.getTextInputValue('q'+i)||'—'}));
    const subject=answers[0]?.value??ticketType;
-   const details=answers.map(a=>'**'+a.name+'**\\n'+a.value).join('\n\n').slice(0,3900);
+   const details=answers.map(a=>'**'+a.name+'**\n'+a.value).join('\n\n').slice(0,3900);
    if(!cfg.ticketCategoryId){await interaction.reply({content:'Ticket kategorija nenustatyta.',flags:MessageFlags.Ephemeral});return;}
    await interaction.deferReply({flags:MessageFlags.Ephemeral});
    const existing=await db.supportTicket.findFirst({where:{guildId,userId,status:'open'}});
@@ -296,7 +296,7 @@ client.on(Events.InteractionCreate,async interaction=>{
    if(batch.size<100)break;
   }
   const transcript=lines.reverse().join('\n').slice(0,7_000_000)||'No messages.';
-  const claimedBy=/^Claimed by .*\\((\\d+)\\)$/.exec(ch.type===ChannelType.GuildText?(ch.topic??''):'')?.[1]??null;
+  const claimedBy=/^Claimed by .*\((\d+)\)$/.exec(ch.type===ChannelType.GuildText?(ch.topic??''):'')?.[1]??null;
   const updated=await db.supportTicket.updateMany({where:{id:ticket.id,status:'open'},data:{status:'closed',closedAt:new Date(),closedById:userId,claimedById:claimedBy,transcriptText:transcript}});
   if(!updated.count){await interaction.followUp({content:'Ticketas jau uždarytas.',flags:MessageFlags.Ephemeral});return;}
   const file=new AttachmentBuilder(Buffer.from(transcript,'utf8'),{name:'ticket-'+ticket.id+'.txt'});
