@@ -65,6 +65,7 @@ model CommunityPanel {
   supportRoleId String?
   ticketMessage String @default("Reikia pagalbos? Atidaryk ticketą.")
   ticketOptionsJson String?
+  feedbackChannelId String?
   updatedAt DateTime @updatedAt
 }
 model SupportTicket {
@@ -75,6 +76,11 @@ model SupportTicket {
   status String @default("open")
   createdAt DateTime @default(now())
   closedAt DateTime?
+  closedById String?
+  claimedById String?
+  transcriptText String?
+  feedbackRating Int?
+  feedbackAt DateTime?
   @@index([guildId,userId,status])
 }
 
