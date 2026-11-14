@@ -76,7 +76,18 @@ async function audit(guildId:string,event:string,actorId?:string,detail?:string)
   const cfg=await db.guildConfig.findUnique({where:{guildId}});
   if(!cfg?.logChannelId)return;
   const ch=await client.channels.fetch(cfg.logChannelId).catch(()=>null);
-  if(ch?.isTextBased() && 'send' in ch)await ch.send({content:`[${event}] ${detail??''}`.slice(0,1900),allowedMentions:{parse:[]}}).catch(e=>log.warn(e));
+  if(!ch?.isTextBased()||!('send' in ch))return;
+  const person=actorId?'<@'+actorId+'> ('+actorId+')':'Sistema';
+  const descriptions:Record<string,string>={
+    VERIFY:'✅ **Narys patvirtintas / Verified**',
+    MEMBER_LEFT:'👋 **Narys išėjo / Member left**',
+    RAID_ALERT:'🚨 **Anti-Raid įspėjimas**',
+    MASS_MENTIONS:'🛡️ **Masiniai paminėjimai**',
+    AUTOMOD_SPAM:'🛡️ **AutoMod pažeidimas**'
+  };
+  const heading=descriptions[event]??'📋 **'+event.replace(/_/g,' ')+'**';
+  const body=heading+'\n**Narys / User:** '+person+(detail?'\n**Informacija:** '+detail.replace(/@/g,'＠'):'')+'\n**Laikas:** <t:'+Math.floor(Date.now()/1000)+':F>';
+  await ch.send({content:body.slice(0,1900),allowedMentions:{parse:[]}}).catch(e=>log.warn(e,'Audit log send failed'));
 }
 async function lockdown(guildId:string,enable:boolean,actor:string){
   const guild=await client.guilds.fetch(guildId);
