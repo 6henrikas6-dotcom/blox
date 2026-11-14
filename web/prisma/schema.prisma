@@ -45,3 +45,21 @@ model SupportTicket {
   closedAt DateTime?
   @@index([guildId,userId,status])
 }
+
+model Giveaway {
+ id String @id @default(cuid())
+ guildId String
+ channelId String
+ messageId String @unique
+ prize String
+ winnerCount Int @default(1)
+ endsAt DateTime
+ ended Boolean @default(false)
+ createdAt DateTime @default(now())
+ @@index([guildId,ended,endsAt])
+}
+model GiveawayEntry {
+ giveawayId String
+ userId String
+ @@id([giveawayId,userId])
+}
