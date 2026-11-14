@@ -255,7 +255,7 @@ client.on(Events.InteractionCreate,async interaction=>{
    await audit(guildId,'TICKET_OPEN',userId,(ticketType?ticketType+' • ':'')+channel.id);
    return;
   }
-  const ticket=await db.supportTicket.findUnique({where:{channelId:interaction.channelId}});
+  const ticket=interaction.channelId ? await db.supportTicket.findUnique({where:{channelId:interaction.channelId}}) : null;
   if(!ticket||ticket.status!=='open'){await interaction.reply({content:'Ticketas nerastas arba uždarytas.',flags:MessageFlags.Ephemeral});return;}
   const member=await guild.members.fetch(userId);
   if(ticket.userId!==userId&&!member.permissions.has(PermissionFlagsBits.ManageChannels)&&(!cfg.supportRoleId||!member.roles.cache.has(cfg.supportRoleId))){await interaction.reply({content:'Neturi teisės uždaryti šio ticketo.',flags:MessageFlags.Ephemeral});return;}
