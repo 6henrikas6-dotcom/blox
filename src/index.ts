@@ -43,7 +43,7 @@ async function moderateSpam(message:import('discord.js').Message<true>):Promise<
  const massMentions=message.mentions.users.size>=8;
  const suspiciousPromo=suspiciousWords.test(text) && (images>=2||/https?:\\/\\//i.test(text));
  const flood=history.filter(x=>now-x.at<10_000).length>=7;
- const reason=everyone?'@everyone/@here arba masiniai role paminėjimai':massMentions?'Masiniai narių paminėjimai':duplicateCount>=3?'Pasikartojantis spam':recentImages>=8?'Masinis nuotraukų spam':suspiciousPromo?'Įtartina reklama / scam':flood?'Žinučių flood':null;
+ const reason=everyone?'@everyone/@here arba masiniai role paminėjimai':massMentions?'Masiniai narių paminėjimai':duplicateCount>=3?'Pasikartojantis spam':(images>=4||recentImages>=8)?'Masinis nuotraukų spam':suspiciousPromo?'Įtartina reklama / scam':flood?'Žinučių flood':null;
  if(!reason)return false;
  const deleted=await message.delete().then(()=>true).catch(()=>false);
  const state=violations.get(key),count=(state&&now-state.last<30*60_000?state.count:0)+1;
