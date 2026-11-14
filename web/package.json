@@ -1,0 +1,25 @@
+{
+  "name": "devguard-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "prisma generate && next build",
+    "start": "node server.mjs",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.0",
+    "jose": "^6.0.0",
+    "next": "^15.5.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "prisma": "^6.19.0",
+    "typescript": "^5.9.0"
+  }
+}
