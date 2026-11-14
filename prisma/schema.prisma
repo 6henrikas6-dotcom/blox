@@ -47,3 +47,10 @@ model Xp {
   lastEarnedAt DateTime @default(now())
   @@id([guildId, userId])
 }
+
+model LockdownOverwrite {
+  guildId String
+  channelId String
+  previous String
+  @@id([guildId, channelId])
+}
