@@ -12,6 +12,9 @@ export async function POST(req:NextRequest){
  if(!guildId||!token)return NextResponse.json({error:'Botas nesukonfigūruotas'},{status:500});
  let form:FormData;try{form=await req.formData();}catch{return NextResponse.json({error:'Neteisingi formos duomenys'},{status:400});}
  const title=string(form.get('title')).trim(),description=string(form.get('description')).trim(),content=string(form.get('content')).trim(),footer=string(form.get('footer')).trim(),author=string(form.get('author')).trim(),imageUrl=string(form.get('imageUrl')).trim(),thumbnailUrl=string(form.get('thumbnailUrl')).trim(),color=string(form.get('color')).trim();
+ const pingEveryone=string(form.get('everyone'))==='true';
+ const roleId=string(form.get('roleId'));
+ if(roleId&&!/^\d{17,20}$/.test(roleId))return NextResponse.json({error:'Netinkamas rolės ID'},{status:400});
  const file=form.get('image');
  if(title.length>256||description.length>4000||content.length>2000||footer.length>2048||author.length>256||(!title&&!description&&!content))return NextResponse.json({error:'Patikrink tekstą ir laukų ilgį'},{status:400});
  const validUrl=(s:string)=>{if(!s)return true;try{const u=new URL(s);return u.protocol==='https:'&&s.length<=1800&&!u.username&&!u.password;}catch{return false;}};
@@ -31,7 +34,18 @@ export async function POST(req:NextRequest){
   else if(imageUrl)embed.image={url:imageUrl};
   embeds.push(embed);
  }
- const payload={content,embeds,allowed_mentions:{parse:[]}};
+ let selectedRole='';
+ if(roleId){
+  try{
+   const rolesRes=await fetch(discordApi+'/guilds/'+guildId+'/roles',{headers:{Authorization:'Bot '+token},cache:'no-store'});
+   if(!rolesRes.ok)return NextResponse.json({error:'Nepavyko patikrinti rolės'},{status:502});
+   const roles=await rolesRes.json() as Array<{id:string}>;
+   if(!roles.some(r=>r.id===roleId))return NextResponse.json({error:'Rolė nerasta serveryje'},{status:400});
+   selectedRole=roleId;
+  }catch{return NextResponse.json({error:'Nepavyko patikrinti rolės'},{status:502});}
+ }
+ const mentionText=[pingEveryone?'@everyone':'',selectedRole?'<@&'+selectedRole+'>':''].filter(Boolean).join(' ');
+ const payload={content:[mentionText,content].filter(Boolean).join('\\n'),embeds,allowed_mentions:{parse:pingEveryone?['everyone']:[],roles:selectedRole?[selectedRole]:[]}};
  const data=new FormData();data.set('payload_json',JSON.stringify(payload));
  if(file instanceof File){const name=file.type==='image/png'?'image.png':file.type==='image/jpeg'?'image.jpg':file.type==='image/webp'?'image.webp':'image.gif';data.set('files[0]',file,name);}
  try{
