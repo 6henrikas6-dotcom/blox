@@ -126,7 +126,7 @@ client.on(Events.GuildMemberAdd,async member=>{
       const current=await refreshInvites(guildId);
       if(current){if(previous){const used=[...current.entries()].find(([code,entry])=>entry.uses>(previous.get(code)?.uses??0));if(used){inviteCode=used[0];inviterId=used[1].inviterId;}}inviteCache.set(guildId,current);}
       await db.memberInvite.upsert({where:{guildId_userId:{guildId,userId:member.id}},create:{guildId,userId:member.id,inviterId,inviteCode},update:{inviterId,inviteCode,joinedAt:new Date()}});
-      if(auto?.inviteLogChannelId)await sendTo(guildId,auto.inviteLogChannelId,'🔗 '+member.user.username+' joined • inviter: '+(inviterId?'<@'+inviterId+'>':'unknown')+' • code: '+(inviteCode??'unknown'));
+      if(auto?.inviteLogChannelId)await sendTo(guildId,auto.inviteLogChannelId,'🔗 <@'+member.id+'> joined • inviter: '+(inviterId?'<@'+inviterId+'>':'unknown')+' • code: '+(inviteCode??'unknown'));
     }
     if(auto?.welcomeChannelId){
       const welcomeChannel=await member.guild.channels.fetch(auto.welcomeChannelId).catch(()=>null);
