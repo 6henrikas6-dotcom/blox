@@ -17,5 +17,7 @@ export const commands = [
  new SlashCommandBuilder().setName('updates').setDescription('Manage update DM subscriptions')
   .addSubcommand(s=>s.setName('subscribe').setDescription('Opt in to future update DMs'))
   .addSubcommand(s=>s.setName('unsubscribe').setDescription('Opt out of update DMs')),
+ new SlashCommandBuilder().setName('ticket-config').setDescription('Nustatyti ticket transcript ir feedback kanalą').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .addChannelOption(o=>o.setName('feedback_channel').setDescription('Kanalas transcriptams ir įvertinimams').addChannelTypes(0).setRequired(true)),
  new SlashCommandBuilder().setName('rank').setDescription('Show your activity XP')
 ].map(command=>command.toJSON());
