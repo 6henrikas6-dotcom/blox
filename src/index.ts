@@ -343,14 +343,20 @@ client.on(Events.InteractionCreate,async interaction=>{
 
 async function feedbackDestination(guildId:string,configured:string|null|undefined){
  const guild=await client.guilds.fetch(guildId).catch(()=>null);
- if(!guild)return null;
+ if(!guild){log.warn({guildId},'Feedback guild unavailable');return null;}
  if(configured){
   const selected=await guild.channels.fetch(configured).catch(()=>null);
-  if(selected?.isTextBased()&&'send' in selected)return selected;
+  if(selected?.type===ChannelType.GuildText)return selected;
+  log.warn({guildId,configured},'Configured feedback channel missing or not text');
  }
  const channels=await guild.channels.fetch().catch(()=>null);
- const feedback=channels?.find(c=>c?.type===ChannelType.GuildText&&/^([・•·\\s-]*)(feedback|atsiliepimai|ivertinimai)$/i.test(c.name.normalize('NFKD').replace(/[\\u0300-\\u036f]/g,'')));
- if(feedback?.isTextBased()&&'send' in feedback)return feedback;
+ const feedback=channels?.find(c=>{
+  if(c?.type!==ChannelType.GuildText)return false;
+  const normalized=c.name.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'');
+  return normalized.includes('feedback')||normalized.includes('atsiliepim')||normalized.includes('ivertinim');
+ });
+ if(feedback?.type===ChannelType.GuildText)return feedback;
+ log.warn({guildId,configured,channels:channels?.map(c=>c?.name).filter(Boolean)},'No feedback channel found');
  return null;
 }
 
@@ -365,12 +371,16 @@ client.on(Events.InteractionCreate,async interaction=>{
   const rating=Number(ratingText);
   const changed=await db.supportTicket.updateMany({where:{id:ticketId,feedbackRating:null,status:'closed'},data:{feedbackRating:rating,feedbackAt:new Date()}});
   if(!changed.count){await interaction.reply({content:'Šis ticketas jau įvertintas.',flags:MessageFlags.Ephemeral});return;}
-  await interaction.update({content:'Ačiū! Įvertinai pagalbą '+rating+'/5 ⭐',components:[]});
   const cfg=await db.communityPanel.findUnique({where:{guildId:ticket.guildId}});
-  {
-   const channel=await feedbackDestination(ticket.guildId,cfg?.feedbackChannelId);
-   if(channel)await channel.send({embeds:[new EmbedBuilder().setTitle('⭐ Ticket feedback').addFields({name:'Ticket',value:'Support ticket • '+ticket.channelId.slice(-6)},{name:'Įvertinimas',value:rating+'/5 ⭐'},{name:'Klientas',value:'<@'+ticket.userId+'>'},{name:'Support',value:ticket.claimedById?'<@'+ticket.claimedById+'>':'Nepriskirtas'}).setColor(0x8066f2).setTimestamp()],allowedMentions:{parse:[]}}).catch(e=>log.error(e,'Feedback log delivery failed'));
+  const channel=await feedbackDestination(ticket.guildId,cfg?.feedbackChannelId);
+  let delivered=false;
+  if(channel){
+   try{
+    await channel.send({embeds:[new EmbedBuilder().setTitle('⭐ Ticket feedback').addFields({name:'Ticket',value:'Support ticket • '+ticket.channelId.slice(-6)},{name:'Įvertinimas',value:rating+'/5 ⭐'},{name:'Klientas',value:'<@'+ticket.userId+'>'},{name:'Support',value:ticket.claimedById?'<@'+ticket.claimedById+'>':'Nepriskirtas'}).setColor(0x8066f2).setTimestamp()],allowedMentions:{parse:[]}});
+    delivered=true;
+   }catch(e){log.error({error:e,channelId:channel.id,ticketId},'Feedback log delivery failed');}
   }
+  await interaction.update({content:delivered?'Ačiū! Įvertinai pagalbą '+rating+'/5 ⭐. Įvertinimas nusiųstas support komandai.':'Įvertinimas '+rating+'/5 ⭐ išsaugotas, bet jo nepavyko išsiųsti į feedback kanalą. Pranešk administratoriui, kad patikrintų kanalo nustatymus ir boto leidimus.',components:[]});
  }catch(e){log.error(e,'Ticket feedback failed');if(!interaction.replied&&!interaction.deferred)await interaction.reply({content:'Nepavyko išsaugoti įvertinimo.',flags:MessageFlags.Ephemeral}).catch(()=>{});}
 });
 
