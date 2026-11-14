@@ -245,7 +245,12 @@ client.on(Events.InteractionCreate,async interaction=>{
       if(!cfg?.announcementChannelId){await interaction.reply({content:'Set an announcement channel with /setup.',flags:MessageFlags.Ephemeral});return;}
       const ch=await guild.channels.fetch(cfg.announcementChannelId);
       if(!ch || !ch.isTextBased() || !('send' in ch)){await interaction.reply({content:'Announcement channel unavailable.',flags:MessageFlags.Ephemeral});return;}
-      await ch.send({embeds:[new EmbedBuilder().setTitle(interaction.options.getString('title',true)).setDescription(interaction.options.getString('body',true)).setColor(0x5865f2).setTimestamp()],allowedMentions:{parse:[]}});
+      const pingEveryone=interaction.options.getBoolean('everyone')??false;
+      const pingRole=interaction.options.getRole('role');
+      if((pingEveryone||pingRole)&&!interaction.memberPermissions?.has(PermissionFlagsBits.MentionEveryone)){await interaction.reply({content:'Norint žymėti @everyone arba roles reikia Mention Everyone teisės.',flags:MessageFlags.Ephemeral});return;}
+      const pingText=[pingEveryone?'@everyone':null,pingRole?'<@&'+pingRole.id+'>':null].filter(Boolean).join(' ');
+      await ch.send({content:pingText||undefined,embeds:[new EmbedBuilder().setTitle(interaction.options.getString('title',true)).setDescription(interaction.options.getString('body',true)).setColor(0x5865f2).setTimestamp()],allowedMentions:{parse:pingEveryone?['everyone']:[],roles:pingRole?[pingRole.id]:[]}});
+
       await interaction.reply({content:'Announcement posted (no DMs sent).',flags:MessageFlags.Ephemeral});
       await audit(id,'ANNOUNCE',interaction.user.id);return;
     }
