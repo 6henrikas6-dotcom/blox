@@ -29,7 +29,7 @@ async function lockdown(guildId:string,enable:boolean,actor:string){
       const existing=ch.permissionOverwrites.cache.get(guild.roles.everyone.id);
       const previous=existing?.allow.has(PermissionFlagsBits.SendMessages)?'allow':existing?.deny.has(PermissionFlagsBits.SendMessages)?'deny':'inherit';
       try {
-        await ch.permissionOverwrites.edit(guild.roles.everyone,{SendMessages:false},'Anti-raid lockdown');
+        await ch.permissionOverwrites.edit(guild.roles.everyone,{SendMessages:false},{reason:'Anti-raid lockdown'});
         await db.lockdownOverwrite.upsert({where:{guildId_channelId:{guildId,channelId:ch.id}},create:{guildId,channelId:ch.id,previous},update:{previous}});
       } catch(e){log.warn({error:e,channel:ch.id},'Could not lock channel');}
     }
@@ -39,7 +39,7 @@ async function lockdown(guildId:string,enable:boolean,actor:string){
       const ch=guild.channels.cache.get(snap.channelId);
       if(ch?.type===ChannelType.GuildText && ch.permissionsFor(me)?.has(PermissionFlagsBits.ManageRoles)){
         try {
-          await ch.permissionOverwrites.edit(guild.roles.everyone,{SendMessages:snap.previous==='inherit'?null:snap.previous==='allow'},'Restore pre-lockdown permissions');
+          await ch.permissionOverwrites.edit(guild.roles.everyone,{SendMessages:snap.previous==='inherit'?null:snap.previous==='allow'},{reason:'Restore pre-lockdown permissions'});
           await db.lockdownOverwrite.delete({where:{guildId_channelId:{guildId,channelId:ch.id}}});
         }catch(e){log.warn({error:e,channel:ch.id},'Could not restore permissions');}
       }
