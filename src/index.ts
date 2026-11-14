@@ -193,6 +193,41 @@ client.on(Events.InteractionCreate,async interaction=>{
  }catch(e){log.error(e,'Community panel interaction failed');if(interaction.deferred||interaction.replied)await interaction.editReply('Įvyko klaida. Patikrink boto leidimus.').catch(()=>{});else await interaction.reply({content:'Įvyko klaida. Patikrink boto leidimus.',flags:MessageFlags.Ephemeral}).catch(()=>{});}
 });
 
+
+client.on(Events.InteractionCreate,async interaction=>{
+ if(!interaction.isButton()||!interaction.inGuild()||!interaction.customId.startsWith('dg_giveaway:'))return;
+ try{
+  const id=interaction.customId.slice('dg_giveaway:'.length);
+  const giveaway=await db.giveaway.findUnique({where:{id}});
+  if(!giveaway||giveaway.guildId!==interaction.guildId||giveaway.ended||giveaway.endsAt<=new Date()){await interaction.reply({content:'Šis giveaway jau baigėsi.',flags:MessageFlags.Ephemeral});return;}
+  const key={giveawayId_userId:{giveawayId:id,userId:interaction.user.id}};
+  const existing=await db.giveawayEntry.findUnique({where:key});
+  if(existing){await db.giveawayEntry.delete({where:key});await interaction.reply({content:'Dalyvavimas atšauktas.',flags:MessageFlags.Ephemeral});}
+  else{await db.giveawayEntry.create({data:{giveawayId:id,userId:interaction.user.id}});await interaction.reply({content:'Dalyvauji giveaway! 🎉',flags:MessageFlags.Ephemeral});}
+ }catch(e){log.error(e,'Giveaway button');if(!interaction.replied)await interaction.reply({content:'Nepavyko. Bandyk dar kartą.',flags:MessageFlags.Ephemeral}).catch(()=>{});}
+});
+async function finishGiveaways(){
+ const due=await db.giveaway.findMany({where:{ended:false,endsAt:{lte:new Date()}},take:20});
+ for(const g of due){
+  const claimed=await db.giveaway.updateMany({where:{id:g.id,ended:false},data:{ended:true}});
+  if(!claimed.count)continue;
+  try{
+   const entries=await db.giveawayEntry.findMany({where:{giveawayId:g.id}});
+   const pool=entries.map(e=>e.userId);
+   const winners:string[]=[];
+   while(pool.length&&winners.length<g.winnerCount){const i=Math.floor(Math.random()*pool.length);winners.push(pool.splice(i,1)[0]);}
+   const ch=await client.channels.fetch(g.channelId);
+   if(ch?.isTextBased()&&'send' in ch){
+    const original=await ch.messages.fetch(g.messageId).catch(()=>null);
+    if(original)await original.edit({components:[]}).catch(()=>{});
+    await ch.send({content:winners.length?'🎉 Giveaway baigėsi! **'+g.prize+'**\nLaimėtojai: '+winners.map(id=>'<@'+id+'>').join(', '):'Giveaway baigėsi: **'+g.prize+'**. Dalyvių nebuvo.',allowedMentions:{users:winners}});
+   }
+   await audit(g.guildId,'GIVEAWAY_ENDED',undefined,g.prize);
+  }catch(e){log.error(e,'Could not announce giveaway result');}
+ }
+}
+client.once(Events.ClientReady,()=>{setInterval(()=>finishGiveaways().catch(e=>log.error(e,'Giveaway scheduler')),30_000);finishGiveaways().catch(e=>log.error(e));});
+
 const stop=async()=>{client.destroy();await db.$disconnect();process.exit(0);};
 process.once('SIGTERM',()=>{void stop();});
 process.once('SIGINT',()=>{void stop();});
