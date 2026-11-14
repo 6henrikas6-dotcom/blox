@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+model GuildConfig {
+  guildId String @id
+  logChannelId String?
+  announcementChannelId String?
+  verifiedRoleId String?
+  joinThreshold Int @default(8)
+  lockdown Boolean @default(false)
+  updatedAt DateTime @updatedAt
+}
+model Subscription {
+  guildId String
+  userId String
+  enabled Boolean @default(true)
+  updatedAt DateTime @updatedAt
+  @@id([guildId, userId])
+}
+model ModerationCase {
+  id String @id @default(cuid())
+  guildId String
+  targetId String
+  actorId String
+  action String
+  reason String?
+  createdAt DateTime @default(now())
+  @@index([guildId, targetId])
+}
+model AuditEvent {
+  id String @id @default(cuid())
+  guildId String
+  actorId String?
+  event String
+  detail String?
+  createdAt DateTime @default(now())
+  @@index([guildId, createdAt])
+}
+model Xp {
+  guildId String
+  userId String
+  points Int @default(0)
+  lastEarnedAt DateTime @default(now())
+  @@id([guildId, userId])
+}
