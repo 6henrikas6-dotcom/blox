@@ -1,0 +1,6 @@
+ALTER TABLE "CommunityPanel" ADD COLUMN IF NOT EXISTS "feedbackChannelId" TEXT;
+ALTER TABLE "SupportTicket" ADD COLUMN IF NOT EXISTS "closedById" TEXT;
+ALTER TABLE "SupportTicket" ADD COLUMN IF NOT EXISTS "claimedById" TEXT;
+ALTER TABLE "SupportTicket" ADD COLUMN IF NOT EXISTS "transcriptText" TEXT;
+ALTER TABLE "SupportTicket" ADD COLUMN IF NOT EXISTS "feedbackRating" INTEGER;
+ALTER TABLE "SupportTicket" ADD COLUMN IF NOT EXISTS "feedbackAt" TIMESTAMP(3);
