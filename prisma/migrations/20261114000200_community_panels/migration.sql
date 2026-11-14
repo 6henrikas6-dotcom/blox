@@ -1,0 +1,4 @@
+CREATE TABLE "CommunityPanel" ("guildId" TEXT NOT NULL,"verifyChannelId" TEXT,"verifiedRoleId" TEXT,"verifyMessage" TEXT NOT NULL DEFAULT 'Paspausk Verify, kad gautum prieigą prie serverio.',"ticketChannelId" TEXT,"ticketCategoryId" TEXT,"supportRoleId" TEXT,"ticketMessage" TEXT NOT NULL DEFAULT 'Reikia pagalbos? Atidaryk ticketą.',"updatedAt" TIMESTAMP(3) NOT NULL,CONSTRAINT "CommunityPanel_pkey" PRIMARY KEY ("guildId"));
+CREATE TABLE "SupportTicket" ("id" TEXT NOT NULL,"guildId" TEXT NOT NULL,"userId" TEXT NOT NULL,"channelId" TEXT NOT NULL,"status" TEXT NOT NULL DEFAULT 'open',"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"closedAt" TIMESTAMP(3),CONSTRAINT "SupportTicket_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "SupportTicket_channelId_key" ON "SupportTicket"("channelId");
+CREATE INDEX "SupportTicket_guildId_userId_status_idx" ON "SupportTicket"("guildId","userId","status");
