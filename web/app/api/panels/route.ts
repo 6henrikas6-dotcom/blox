@@ -10,9 +10,11 @@ export async function POST(req:NextRequest){
  const str=(key:string)=>{const value=form.get(key);return typeof value==='string'?value:'';};
  const data={mode:str('mode'),channelId:str('channelId'),roleId:str('roleId'),categoryId:str('categoryId'),message:str('message'),title:str('title'),color:str('color'),footer:str('footer'),imageUrl:str('imageUrl'),thumbnailUrl:str('thumbnailUrl')};
  const image=form.get('image');
+ let sections:{name:string;value:string;inline?:boolean}[]=[];
+ try{const raw=str('sections');if(raw){const parsed:unknown=JSON.parse(raw);if(!Array.isArray(parsed)||parsed.length>12)throw Error('invalid');sections=parsed.map((v:unknown)=>{if(!v||typeof v!=='object')throw Error('invalid');const x=v as Record<string,unknown>;if(typeof x.name!=='string'||typeof x.value!=='string'||x.name.length>256||x.value.length>1024)throw Error('invalid');return {name:x.name.trim(),value:x.value.trim(),inline:x.inline===true};}).filter(x=>x.name&&x.value);}}catch{return NextResponse.json({error:'Neteisingos embed sekcijos'},{status:400});}
  if(image!==null&&(!(image instanceof File)||!['image/png','image/jpeg','image/webp','image/gif'].includes(image.type)||image.size>8*1024*1024||image.size===0))return NextResponse.json({error:'Nuotrauka turi būti PNG/JPG/WEBP/GIF iki 8 MB'},{status:400});
  const validUrl=(value:string)=>{if(!value)return true;try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&value.length<=1800;}catch{return false;}};
- if(data.title.length>256||data.footer.length>2048||!validUrl(data.imageUrl)||!validUrl(data.thumbnailUrl))return NextResponse.json({error:'Patikrink embed laukus ir nuotraukų URL'},{status:400});
+ if(data.title.length>256||data.footer.length>2048||(data.title.length+data.message.length+data.footer.length+sections.reduce((n,x)=>n+x.name.length+x.value.length,0)>5800)||!validUrl(data.imageUrl)||!validUrl(data.thumbnailUrl))return NextResponse.json({error:'Patikrink embed laukus ir nuotraukų URL'},{status:400});
  const mode=data.mode;
  if(mode!=='verify'&&mode!=='ticket')return NextResponse.json({error:'Invalid panel type'},{status:400});
  const channelId=data.channelId,roleId=data.roleId,categoryId=data.categoryId,message=data.message;
@@ -29,6 +31,7 @@ export async function POST(req:NextRequest){
   const role=roles.find(r=>r.id===roleId);if(!role||role.managed||((BigInt(role.permissions)&(BigInt(8)|BigInt(32)|BigInt(268435456)|BigInt(2)|BigInt(4)))!==BigInt(0)))return NextResponse.json({error:'Pasirink paprastą, ne administratoriaus rolę'},{status:400});
   const color=/^#[0-9a-fA-F]{6}$/.test(data.color)?parseInt(data.color.slice(1),16):10189055;
   const embed:Record<string,unknown>={title:data.title|| (mode==='verify'?'Server Verification':'Support Tickets'),description:message,color};
+  if(sections.length)embed.fields=sections;
   if(data.footer)embed.footer={text:data.footer};
   if(data.thumbnailUrl)embed.thumbnail={url:data.thumbnailUrl};
   if(image instanceof File)embed.image={url:'attachment://'+(image.type==='image/png'?'panel.png':image.type==='image/jpeg'?'panel.jpg':image.type==='image/webp'?'panel.webp':'panel.gif')};
