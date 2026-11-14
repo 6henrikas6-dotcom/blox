@@ -1,0 +1,1 @@
+ALTER TABLE "CommunityPanel" ADD COLUMN "ticketOptionsJson" TEXT;
