@@ -176,7 +176,7 @@ client.on(Events.InteractionCreate,async interaction=>{
 
 client.on(Events.InteractionCreate,async interaction=>{
  if((!interaction.isButton()&&!interaction.isStringSelectMenu()&&!interaction.isModalSubmit())||!interaction.inGuild())return;
- if(!['dg_verify','dg_ticket_open','dg_ticket_close','dg_ticket_select','dg_ticket_claim'].includes(interaction.customId)&&!interaction.customId.startsWith('dg_ticket_form:'))return;
+ if(!['dg_verify','dg_ticket_open','dg_ticket_close','dg_ticket_select','dg_ticket_claim','dg_ticket_cancel','dg_ticket_confirm','dg_ticket_close_confirm','dg_ticket_close_cancel'].includes(interaction.customId)&&!interaction.customId.startsWith('dg_ticket_form:')&&!interaction.customId.startsWith('dg_ticket_confirm:'))return;
  try{
   const guild=interaction.guild!,guildId=guild.id,userId=interaction.user.id;
   const cfg=await db.communityPanel.findUnique({where:{guildId}});
@@ -191,22 +191,50 @@ client.on(Events.InteractionCreate,async interaction=>{
    await audit(guildId,'VERIFY',userId);
    return;
   }
+  if(interaction.customId==='dg_ticket_cancel'){await interaction.update({content:'❌ Ticket kūrimas atšauktas.',components:[]});return;}
+  if(interaction.customId==='dg_ticket_close_cancel'){await interaction.update({content:'Ticketas paliktas atidarytas.',components:[]});return;}
   if(interaction.customId==='dg_ticket_open'||interaction.customId==='dg_ticket_select'){
-   const ticketType=interaction.isStringSelectMenu()?interaction.values[0]:null;
-   if(ticketType&&(!ticketType.trim()||ticketType.length>70)){await interaction.reply({content:'Netinkamas ticket pasirinkimas.',flags:MessageFlags.Ephemeral});return;}
+   const ticketType=interaction.isStringSelectMenu()?interaction.values[0]:'General';
+   if(!ticketType.trim()||ticketType.length>70){await interaction.reply({content:'Netinkamas ticket pasirinkimas.',flags:MessageFlags.Ephemeral});return;}
    const existing=await db.supportTicket.findFirst({where:{guildId,userId,status:'open'}});
    if(existing){await interaction.reply({content:'Jau turi atidarytą ticketą: <#'+existing.channelId+'>',flags:MessageFlags.Ephemeral});return;}
-   const type=encodeURIComponent(ticketType??'General');
-   const modal=new ModalBuilder().setCustomId('dg_ticket_form:'+type).setTitle('Lextrum Support • '+(ticketType??'General').slice(0,22));
-   modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('subject').setLabel('Kuo galime padėti?').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(150)),new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('details').setLabel('Aprašyk problemą arba klausimą').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1800)));
+   const row=new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('dg_ticket_confirm:'+encodeURIComponent(ticketType)).setLabel('Tęsti / Continue').setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId('dg_ticket_cancel').setLabel('Atšaukti / Cancel').setStyle(ButtonStyle.Secondary));
+   await interaction.reply({content:'🎫 **'+ticketType+'**\\nPrieš atidarant ticketą reikės užpildyti pagalbos formą. Ar nori tęsti?',components:[row],flags:MessageFlags.Ephemeral});return;
+  }
+  if(interaction.customId.startsWith('dg_ticket_confirm:')){
+   if(!interaction.isButton())return;
+   const ticketType=decodeURIComponent(interaction.customId.slice('dg_ticket_confirm:'.length));
+   if(!ticketType||ticketType.length>70)return;
+   const existing=await db.supportTicket.findFirst({where:{guildId,userId,status:'open'}});
+   if(existing){await interaction.reply({content:'Jau turi atidarytą ticketą.',flags:MessageFlags.Ephemeral});return;}
+   type TicketQuestion={label:string;style:'short'|'paragraph';required:boolean};
+   let options:{label:string;questions?:TicketQuestion[]}[]=[];
+   try{options=JSON.parse(cfg.ticketOptionsJson??'[]');}catch{}
+   const option=options.find(o=>o.label===ticketType);
+   const questions=option?.questions?.length?option.questions:[{label:'Priežastis / Reason',style:'short' as const,required:true},{label:'Aprašyk problemą / Details',style:'paragraph' as const,required:true}];
+   const modal=new ModalBuilder().setCustomId('dg_ticket_form:'+encodeURIComponent(ticketType)).setTitle(('Lextrum • '+ticketType).slice(0,45));
+   questions.slice(0,5).forEach((q,i)=>modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(new TextInputBuilder().setCustomId('q'+i).setLabel(q.label.slice(0,45)).setStyle(q.style==='paragraph'?TextInputStyle.Paragraph:TextInputStyle.Short).setRequired(q.required).setMaxLength(q.style==='paragraph'?1500:200))));
    await interaction.showModal(modal);return;
+  }
+  if(interaction.customId==='dg_ticket_close_confirm'){
+   if(!interaction.isButton())return;
+   const ticket=await db.supportTicket.findUnique({where:{channelId:interaction.channelId}});
+   if(!ticket||ticket.status!=='open')return;
+   const member=await guild.members.fetch(userId);
+   if(ticket.userId!==userId&&!member.permissions.has(PermissionFlagsBits.ManageChannels)&&(!cfg.supportRoleId||!member.roles.cache.has(cfg.supportRoleId))){await interaction.reply({content:'Neturi teisės uždaryti.',flags:MessageFlags.Ephemeral});return;}
+   // Continue into the existing close handler below.
   }
   if(interaction.customId.startsWith('dg_ticket_form:')){
    if(!interaction.isModalSubmit())return;
    const ticketType=decodeURIComponent(interaction.customId.slice('dg_ticket_form:'.length));
    if(!ticketType||ticketType.length>70){await interaction.reply({content:'Netinkama kategorija',flags:MessageFlags.Ephemeral});return;}
-   const subject=interaction.fields.getTextInputValue('subject');
-   const details=interaction.fields.getTextInputValue('details');
+   let options:{label:string;questions?:{label:string;style:string;required:boolean}[]}[]=[];
+   try{options=JSON.parse(cfg.ticketOptionsJson??'[]');}catch{}
+   const questions=options.find(o=>o.label===ticketType)?.questions;
+   const fields=(questions?.length?questions:[{label:'Priežastis / Reason',style:'short',required:true},{label:'Aprašyk problemą / Details',style:'paragraph',required:true}]).slice(0,5);
+   const answers=fields.map((q,i)=>({name:q.label,value:interaction.fields.getTextInputValue('q'+i)||'—'}));
+   const subject=answers[0]?.value??ticketType;
+   const details=answers.map(a=>'**'+a.name+'**\\n'+a.value).join('\\n\\n').slice(0,3900);
    if(!cfg.ticketCategoryId){await interaction.reply({content:'Ticket kategorija nenustatyta.',flags:MessageFlags.Ephemeral});return;}
    await interaction.deferReply({flags:MessageFlags.Ephemeral});
    const existing=await db.supportTicket.findFirst({where:{guildId,userId,status:'open'}});
@@ -221,7 +249,7 @@ client.on(Events.InteractionCreate,async interaction=>{
    if(cfg.supportRoleId)overwrites.push({id:cfg.supportRoleId,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]});
    const channel=await guild.channels.create({name:(ticketType?ticketType.toLowerCase().normalize('NFKD').replace(/[^a-z0-9-]/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,32)+'-':'ticket-')+userId.slice(-6),type:ChannelType.GuildText,parent:cfg.ticketCategoryId,permissionOverwrites:overwrites,reason:'DevGuard support ticket'});
    try{await db.supportTicket.create({data:{guildId,userId,channelId:channel.id}});}catch(e){await channel.delete().catch(()=>{});throw e;}
-   const row=new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('dg_ticket_claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Primary),new ButtonBuilder().setCustomId('dg_ticket_close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger));
+   const row=new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('dg_ticket_claim').setLabel('Priimti / Claim').setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId('dg_ticket_close').setLabel('Uždaryti / Close').setStyle(ButtonStyle.Danger));
    await channel.send({content:'🎫 **'+ticketType.replace(/[*_~`\\]/g,'')+'** • <@'+userId+'> '+(cfg.supportRoleId?'<@&'+cfg.supportRoleId+'>':''),embeds:[new EmbedBuilder().setTitle(subject).setDescription(details).setColor(0x8066f2)],components:[row],allowedMentions:{users:[userId],roles:cfg.supportRoleId?[cfg.supportRoleId]:[]}});
    await interaction.editReply('Ticketas sukurtas: <#'+channel.id+'>');
    await audit(guildId,'TICKET_OPEN',userId,(ticketType?ticketType+' • ':'')+channel.id);
@@ -240,6 +268,10 @@ client.on(Events.InteractionCreate,async interaction=>{
    await interaction.reply({content:'Ticketas priskirtas tau.',flags:MessageFlags.Ephemeral});
    await ch.send({content:'🛠️ Ticketą perėmė <@'+userId+'>',allowedMentions:{users:[userId]}});
    await audit(guildId,'TICKET_CLAIM',userId,ch.id);return;
+  }
+  if(interaction.customId==='dg_ticket_close'){
+   const row=new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('dg_ticket_close_confirm').setLabel('Taip, uždaryti').setStyle(ButtonStyle.Danger),new ButtonBuilder().setCustomId('dg_ticket_close_cancel').setLabel('Atšaukti').setStyle(ButtonStyle.Secondary));
+   await interaction.reply({content:'Ar tikrai nori uždaryti šį ticketą?',components:[row],flags:MessageFlags.Ephemeral});return;
   }
   await interaction.reply({content:'Ticketas uždaromas.',flags:MessageFlags.Ephemeral});
   try{
