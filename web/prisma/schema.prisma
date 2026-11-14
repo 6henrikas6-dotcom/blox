@@ -14,6 +14,23 @@ model GuildConfig {
   lockdown Boolean @default(false)
   updatedAt DateTime @updatedAt
 }
+model Subscription {
+  guildId String
+  userId String
+  enabled Boolean @default(true)
+  updatedAt DateTime @updatedAt
+  @@id([guildId, userId])
+}
+model ModerationCase {
+  id String @id @default(cuid())
+  guildId String
+  targetId String
+  actorId String
+  action String
+  reason String?
+  createdAt DateTime @default(now())
+  @@index([guildId, targetId])
+}
 model AuditEvent {
   id String @id @default(cuid())
   guildId String
@@ -22,6 +39,20 @@ model AuditEvent {
   detail String?
   createdAt DateTime @default(now())
   @@index([guildId, createdAt])
+}
+model Xp {
+  guildId String
+  userId String
+  points Int @default(0)
+  lastEarnedAt DateTime @default(now())
+  @@id([guildId, userId])
+}
+
+model LockdownOverwrite {
+  guildId String
+  channelId String
+  previous String
+  @@id([guildId, channelId])
 }
 
 model CommunityPanel {
@@ -33,6 +64,7 @@ model CommunityPanel {
   ticketCategoryId String?
   supportRoleId String?
   ticketMessage String @default("Reikia pagalbos? Atidaryk ticketą.")
+  ticketOptionsJson String?
   updatedAt DateTime @updatedAt
 }
 model SupportTicket {
@@ -62,4 +94,30 @@ model GiveawayEntry {
  giveawayId String
  userId String
  @@id([giveawayId,userId])
+}
+
+model CommunityAutomation {
+ guildId String @id
+ welcomeChannelId String?
+ goodbyeChannelId String?
+ inviteLogChannelId String?
+ levelChannelId String?
+ welcomeMessage String @default("👋 Sveikas atvykęs, {user}! Tu esi {count}-asis narys.")
+ goodbyeMessage String @default("👋 {username} paliko serverį.")
+ levelMessage String @default("🎉 {user} pasiekė {level} lygį!")
+ xpEnabled Boolean @default(true)
+ xpPerMessage Int @default(5)
+ xpCooldownSeconds Int @default(60)
+ levelUpEnabled Boolean @default(true)
+ inviteTrackingEnabled Boolean @default(true)
+ updatedAt DateTime @updatedAt
+}
+model MemberInvite {
+ guildId String
+ userId String
+ inviterId String?
+ inviteCode String?
+ joinedAt DateTime @default(now())
+ @@id([guildId,userId])
+ @@index([guildId,inviterId])
 }
