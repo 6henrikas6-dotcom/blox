@@ -76,7 +76,7 @@ export async function POST(req:NextRequest){
   if(partnershipUrl&&!sent.components?.some(row=>row.components?.some(button=>button.type===2&&button.url===partnershipUrl))){
    return NextResponse.json({error:'Discord pranešimą paskelbė, bet Join mygtuko negrąžino. Patikrink kanalą ir pranešimą.',messageId:sent.id},{status:502});
   }
-  await db.auditEvent.create({data:{guildId,actorId:user.id,event:'DASHBOARD_ANNOUNCEMENT',detail:title||'Embed announcement'}}).catch(()=>{});
+  await db.auditEvent.create({data:{guildId,actorId:user.id,event:partnershipUrl?'PARTNERSHIP_PUBLISHED':'DASHBOARD_ANNOUNCEMENT',detail:JSON.stringify({title:title||'Embed announcement',channelId,messageId:sent.id??'',partnerUrl:partnershipUrl||undefined})}}).catch(()=>{});
   return NextResponse.json({ok:true});
  }catch{return NextResponse.json({error:'Nepavyko susisiekti su Discord'},{status:502});}
 }
