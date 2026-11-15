@@ -15,6 +15,13 @@ export async function POST(req:NextRequest){
  const pingEveryone=string(form.get('everyone'))==='true';
  const roleId=string(form.get('roleId'));
  const requestedChannelId=string(form.get('channelId'));
+ const partnershipUrl=string(form.get('partnershipUrl')).trim();
+ const buttonLabel=string(form.get('buttonLabel')).trim()||'Join partner server';
+ if(partnershipUrl){
+  try{const u=new URL(partnershipUrl);if(u.protocol!=='https:'||!['discord.gg','discord.com','www.discord.com','discordapp.com'].includes(u.hostname)||!(/^(\\/invite\\/|\\/)[a-zA-Z0-9-]+\\/?$/.test(u.pathname))||u.username||u.password||u.search||u.hash)throw Error('Invalid invite');}
+  catch{return NextResponse.json({error:'Įrašyk teisingą Discord invite nuorodą (https://discord.gg/...)'},{status:400});}
+ }
+ if(buttonLabel.length>80)return NextResponse.json({error:'Mygtuko tekstas per ilgas'},{status:400});
  if(roleId&&!/^\d{17,20}$/.test(roleId))return NextResponse.json({error:'Netinkamas rolės ID'},{status:400});
  const file=form.get('image');
  if(title.length>256||description.length>4000||content.length>2000||footer.length>2048||author.length>256||(!title&&!description&&!content))return NextResponse.json({error:'Patikrink tekstą ir laukų ilgį'},{status:400});
@@ -53,7 +60,8 @@ export async function POST(req:NextRequest){
   }catch{return NextResponse.json({error:'Nepavyko patikrinti rolės'},{status:502});}
  }
  const mentionText=[pingEveryone?'@everyone':'',selectedRole?'<@&'+selectedRole+'>':''].filter(Boolean).join(' ');
- const payload={content:[mentionText,content].filter(Boolean).join('\n'),embeds,allowed_mentions:{parse:pingEveryone?['everyone']:[],roles:selectedRole?[selectedRole]:[]}};
+ const components=partnershipUrl?[{type:1,components:[{type:2,style:5,label:buttonLabel,url:partnershipUrl}]}]:[];
+ const payload={content:[mentionText,content].filter(Boolean).join('\n'),embeds,components,allowed_mentions:{parse:pingEveryone?['everyone']:[],roles:selectedRole?[selectedRole]:[]}};
  const data=new FormData();data.set('payload_json',JSON.stringify(payload));
  if(file instanceof File){const name=file.type==='image/png'?'image.png':file.type==='image/jpeg'?'image.jpg':file.type==='image/webp'?'image.webp':'image.gif';data.set('files[0]',file,name);}
  try{
