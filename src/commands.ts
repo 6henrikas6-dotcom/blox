@@ -28,5 +28,8 @@ export const commands = [
   .addStringOption(o=>o.setName('reason').setDescription('Kodėl tai būtų naudinga?').setMaxLength(800)),
  new SlashCommandBuilder().setName('suggestion-config').setDescription('Nustatyti pasiūlymų kanalą').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .addChannelOption(o=>o.setName('channel').setDescription('Kur publikuoti pasiūlymus').addChannelTypes(0).setRequired(true)),
+ new SlashCommandBuilder().setName('apply').setDescription('Pateikti staff paraišką (forma)'),
+ new SlashCommandBuilder().setName('applications').setDescription('Peržiūrėti naujausias staff paraiškas').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .addIntegerOption(o=>o.setName('limit').setDescription('Kiek paraiškų rodyti (1–15)').setMinValue(1).setMaxValue(15)),
  new SlashCommandBuilder().setName('rank').setDescription('Show your activity XP')
 ].map(command=>command.toJSON());
