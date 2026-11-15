@@ -481,6 +481,15 @@ client.on(Events.InteractionCreate,async interaction=>{
   const existing=await db.giveawayEntry.findUnique({where:key});
   if(existing){await db.giveawayEntry.delete({where:key});await interaction.reply({content:'Dalyvavimas atšauktas.',flags:MessageFlags.Ephemeral});}
   else{await db.giveawayEntry.create({data:{giveawayId:id,userId:interaction.user.id}});await interaction.reply({content:'Dalyvauji giveaway! 🎉',flags:MessageFlags.Ephemeral});}
+  try{
+   const count=await db.giveawayEntry.count({where:{giveawayId:id}});
+   const channel=await client.channels.fetch(giveaway.channelId);
+   if(channel?.isTextBased()&&'messages' in channel){
+    const message=await channel.messages.fetch(giveaway.messageId);
+    const row=new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('dg_giveaway:'+id).setLabel('🎉 Dalyvauti • '+count).setStyle(ButtonStyle.Primary));
+    await message.edit({components:[row]});
+   }
+  }catch(e){log.warn({error:e,giveawayId:id},'Could not refresh giveaway participant count');}
  }catch(e){log.error(e,'Giveaway button');if(!interaction.replied)await interaction.reply({content:'Nepavyko. Bandyk dar kartą.',flags:MessageFlags.Ephemeral}).catch(()=>{});}
 });
 async function finishGiveaways(){
