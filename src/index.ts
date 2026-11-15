@@ -205,6 +205,27 @@ client.on(Events.InteractionCreate,async interaction=>{
       await db.guildConfig.upsert({where:{guildId:id},create:{guildId:id,suggestionChannelId:channel.id},update:{suggestionChannelId:channel.id}});
       await interaction.reply({content:'💡 Pasiūlymų kanalas nustatytas: <#'+channel.id+'>',flags:MessageFlags.Ephemeral});return;
     }
+    if(cmd==='suggestion-status'){
+      if(!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){await interaction.reply({content:'Reikia Manage Server teisės.',flags:MessageFlags.Ephemeral});return;}
+      const messageId=interaction.options.getString('message_id',true).trim();
+      const status=interaction.options.getString('status',true);
+      const note=interaction.options.getString('note')?.trim();
+      if(!/^\d{17,20}$/.test(messageId)){await interaction.reply({content:'Netinkamas žinutės ID.',flags:MessageFlags.Ephemeral});return;}
+      const cfg=await db.guildConfig.findUnique({where:{guildId:id}});
+      if(!cfg?.suggestionChannelId){await interaction.reply({content:'Nustatyk pasiūlymų kanalą su /suggestion-config.',flags:MessageFlags.Ephemeral});return;}
+      const channel=await guild.channels.fetch(cfg.suggestionChannelId).catch(()=>null);
+      if(!channel||channel.type!==ChannelType.GuildText){await interaction.reply({content:'Pasiūlymų kanalas neprieinamas.',flags:MessageFlags.Ephemeral});return;}
+      const post=await channel.messages.fetch(messageId).catch(()=>null);
+      if(!post||post.author.id!==client.user?.id||!post.embeds[0]||!post.embeds[0].title?.startsWith('💡')){await interaction.reply({content:'Nerastas šio boto pasiūlymas nurodytame kanale.',flags:MessageFlags.Ephemeral});return;}
+      const labels:Record<string,string>={pending:'⏳ Pending',accepted:'✅ Accepted',in_progress:'🔧 In Progress',implemented:'🚀 Implemented',denied:'❌ Denied'};
+      const colors:Record<string,number>={pending:0x8066f2,accepted:0x57f287,in_progress:0xfee75c,implemented:0x2ecc71,denied:0xed4245};
+      const embed=EmbedBuilder.from(post.embeds[0]).setColor(colors[status]??0x8066f2).setFooter({text:'Status: '+(labels[status]??status)+' • 👍 Pritariu • 👎 Nepritariu'});
+      const fields=(post.embeds[0].fields??[]).filter(f=>!['Būsena','Staff komentaras'].includes(f.name));
+      embed.setFields(...fields,{name:'Būsena',value:labels[status]??status},...(note?[{name:'Staff komentaras',value:note}]:[]));
+      await post.edit({embeds:[embed],allowedMentions:{parse:[]}});
+      await audit(id,'SUGGESTION_STATUS',interaction.user.id,messageId+' → '+status);
+      await interaction.reply({content:'Pasiūlymo būsena atnaujinta: '+(labels[status]??status)+'\n'+post.url,flags:MessageFlags.Ephemeral});return;
+    }
     if(cmd==='suggestion'){
       const cfg=await db.guildConfig.findUnique({where:{guildId:id}});
       if(!cfg?.suggestionChannelId){await interaction.reply({content:'Administratorius turi nustatyti kanalą per /suggestion-config.',flags:MessageFlags.Ephemeral});return;}
@@ -215,7 +236,7 @@ client.on(Events.InteractionCreate,async interaction=>{
       const channel=await guild.channels.fetch(cfg.suggestionChannelId).catch(()=>null);
       if(!channel||channel.type!==ChannelType.GuildText){await interaction.reply({content:'Pasiūlymų kanalas nerastas arba neprieinamas.',flags:MessageFlags.Ephemeral});return;}
       await interaction.deferReply({flags:MessageFlags.Ephemeral});
-      const embed=new EmbedBuilder().setTitle('💡 Naujas pasiūlymas').setDescription(idea).addFields({name:'Autorius',value:'<@'+interaction.user.id+'>'}).setColor(0x8066f2).setTimestamp().setFooter({text:'👍 Pritariu • 👎 Nepritariu'});
+      const embed=new EmbedBuilder().setTitle('💡 Naujas pasiūlymas').setDescription(idea).addFields({name:'Autorius',value:'<@'+interaction.user.id+'>'}).setColor(0x8066f2).setTimestamp().setFooter({text:'Status: ⏳ Pending • 👍 Pritariu • 👎 Nepritariu'}).addFields({name:'Būsena',value:'⏳ Pending'});
       if(reason)embed.addFields({name:'Kodėl?',value:reason});
       if(attachment)embed.setImage(attachment.url);
       const posted=await channel.send({embeds:[embed],allowedMentions:{parse:[]}});
