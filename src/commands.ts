@@ -31,5 +31,10 @@ export const commands = [
  new SlashCommandBuilder().setName('apply').setDescription('Pateikti staff paraišką (forma)'),
  new SlashCommandBuilder().setName('applications').setDescription('Peržiūrėti naujausias staff paraiškas').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .addIntegerOption(o=>o.setName('limit').setDescription('Kiek paraiškų rodyti (1–15)').setMinValue(1).setMaxValue(15)),
+ new SlashCommandBuilder().setName('suggestion-status').setDescription('Pakeisti pasiūlymo būseną').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .addStringOption(o=>o.setName('message_id').setDescription('Pasiūlymo Discord žinutės ID').setRequired(true))
+  .addStringOption(o=>o.setName('status').setDescription('Nauja būsena').setRequired(true)
+   .addChoices({name:'Pending',value:'pending'},{name:'Accepted',value:'accepted'},{name:'In Progress',value:'in_progress'},{name:'Implemented',value:'implemented'},{name:'Denied',value:'denied'}))
+  .addStringOption(o=>o.setName('note').setDescription('Staff komentaras (nebūtina)').setMaxLength(500)),
  new SlashCommandBuilder().setName('rank').setDescription('Show your activity XP')
 ].map(command=>command.toJSON());
