@@ -45,7 +45,7 @@ async function moderateSpam(message:import('discord.js').Message<true>):Promise<
  const massMentions=message.mentions.users.size>=8;
  const suspiciousPromo=suspiciousWords.test(text) && (images>=2||/https?:\/\//i.test(text));
  const phishing=riskyDomains.test(text) && (suspiciousWords.test(text)||/nitro|gift|verify|login|claim|free/i.test(text));
- const inviteSpam=suspiciousInvite.test(text) && (history.filter(x=>now-x.at<45_000&&suspiciousInvite.test(x.signature)).length>=3);
+ const inviteSpam=suspiciousInvite.test(text) && (history.filter(x=>now-x.at<45_000&&x.signature===signature).length>=3);
  const flood=history.filter(x=>now-x.at<10_000).length>=7;
  const reason=phishing?'Įtartina phishing / scam nuoroda':inviteSpam?'Pasikartojančios Discord invite nuorodos':everyone?'@everyone/@here arba masiniai role paminėjimai':massMentions?'Masiniai narių paminėjimai':duplicateCount>=3?'Pasikartojantis spam':(images>=4||recentImages>=8)?'Masinis nuotraukų spam':suspiciousPromo?'Įtartina reklama / scam':flood?'Žinučių flood':null;
  if(!reason)return false;
