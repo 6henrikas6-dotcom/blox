@@ -179,6 +179,20 @@ client.on(Events.InteractionCreate,async interaction=>{
     if(privileged && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){
       await interaction.reply({content:'Manage Server permission required.',flags:MessageFlags.Ephemeral});return;
     }
+    if(cmd==='apply'){
+      const modal=new ModalBuilder().setCustomId('dg_staff_application').setTitle('Lextrum • Staff Application');
+      const motivation=new TextInputBuilder().setCustomId('motivation').setLabel('Kodėl nori prisijungti prie staff?').setStyle(TextInputStyle.Paragraph).setRequired(true).setMinLength(20).setMaxLength(1000);
+      const experience=new TextInputBuilder().setCustomId('experience').setLabel('Patirtis ir įgūdžiai').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1000);
+      const availability=new TextInputBuilder().setCustomId('availability').setLabel('Kiek laiko gali skirti per savaitę?').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100);
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(motivation),new ActionRowBuilder<TextInputBuilder>().addComponents(experience),new ActionRowBuilder<TextInputBuilder>().addComponents(availability));
+      await interaction.showModal(modal);return;
+    }
+    if(cmd==='applications'){
+      if(!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){await interaction.reply({content:'Reikia Manage Server teisės.',flags:MessageFlags.Ephemeral});return;}
+      const records=await db.auditEvent.findMany({where:{guildId:id,event:'STAFF_APPLICATION'},orderBy:{createdAt:'desc'},take:interaction.options.getInteger('limit')??10});
+      const body=records.map(x=>'• <@'+x.actorId+'> • <t:'+Math.floor(x.createdAt.getTime()/1000)+':R> • '+(x.detail??'').slice(0,100)).join('\n');
+      await interaction.reply({content:body||'Staff paraiškų dar nėra.',flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});return;
+    }
     if(cmd==='ticket-config'){
       if(!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){await interaction.reply({content:'Reikia Manage Server teisės.',flags:MessageFlags.Ephemeral});return;}
       const channel=interaction.options.getChannel('feedback_channel',true);
@@ -274,6 +288,31 @@ client.on(Events.InteractionCreate,async interaction=>{
   }
 });
 
+client.on(Events.InteractionCreate,async interaction=>{
+ if(!interaction.isModalSubmit()||interaction.customId!=='dg_staff_application'||!interaction.inGuild())return;
+ try{
+  await interaction.deferReply({flags:MessageFlags.Ephemeral});
+  const guildId=interaction.guildId;
+  const last=await db.auditEvent.findFirst({where:{guildId,event:'STAFF_APPLICATION',actorId:interaction.user.id},orderBy:{createdAt:'desc'}});
+  if(last&&Date.now()-last.createdAt.getTime()<7*24*60*60_000){await interaction.editReply('Paraišką jau pateikei per pastarąsias 7 dienas.');return;}
+  const motivation=interaction.fields.getTextInputValue('motivation');
+  const experience=interaction.fields.getTextInputValue('experience');
+  const availability=interaction.fields.getTextInputValue('availability');
+  const cfg=await db.guildConfig.findUnique({where:{guildId}});
+  if(!cfg?.logChannelId){await interaction.editReply('Staff paraiškoms administratorius turi nustatyti log kanalą per /setup.');return;}
+  const channel=await interaction.guild!.channels.fetch(cfg.logChannelId).catch(()=>null);
+  if(!channel?.isTextBased()||!('send' in channel)){await interaction.editReply('Staff paraiškų kanalas neprieinamas.');return;}
+  const embed=new EmbedBuilder().setTitle('📋 Nauja staff paraiška').setColor(0x5865f2).addFields(
+   {name:'Kandidatas',value:'<@'+interaction.user.id+'>'},
+   {name:'Motyvacija',value:motivation.slice(0,1024)},
+   {name:'Patirtis',value:experience.slice(0,1024)},
+   {name:'Prieinamumas',value:availability.slice(0,1024)}
+  ).setTimestamp();
+  const sent=await channel.send({embeds:[embed],allowedMentions:{parse:[]}});
+  await db.auditEvent.create({data:{guildId,event:'STAFF_APPLICATION',actorId:interaction.user.id,detail:sent.id}});
+  await interaction.editReply('✅ Paraiška pateikta staff komandai. Ačiū!');
+ }catch(e){log.error(e,'Staff application failed');if(interaction.deferred)await interaction.editReply('Nepavyko pateikti paraiškos.').catch(()=>{});}
+});
 client.on(Events.InteractionCreate,async interaction=>{
  if((!interaction.isButton()&&!interaction.isStringSelectMenu()&&!interaction.isModalSubmit())||!interaction.inGuild())return;
  if(!['dg_verify','dg_ticket_open','dg_ticket_close','dg_ticket_select','dg_ticket_claim','dg_ticket_cancel','dg_ticket_confirm','dg_ticket_close_confirm','dg_ticket_close_cancel'].includes(interaction.customId)&&!interaction.customId.startsWith('dg_ticket_form:')&&!interaction.customId.startsWith('dg_ticket_confirm:'))return;
