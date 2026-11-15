@@ -21,6 +21,28 @@ const messageBursts=new Map<string,{at:number;signature:string;attachmentCount:n
 const violations=new Map<string,{count:number;last:number}>();
 const riskyDomains=/(?:discord(?:-?nitro|-?gift|-?app)?\.(?:gift|click|top|xyz|ru)|(?:steam|roblox|discord)[-_.]?(?:free|bonus|verify|claim)\.(?:com|net|xyz|top)|bit\.ly|tinyurl\.com)\b/i;
 const suspiciousInvite=/https?:\/\/(?:discord\.gg|discord(?:app)?\.com\/invite)\/[^\s]+/i;
+type FaqRule={trigger:string;answer:string|null};
+const faqCache=new Map<string,{expires:number;rules:Map<string,string>}>();
+const faqCooldown=new Map<string,number>();
+const normalizeFaq=(value:string)=>value.trim().toLocaleLowerCase().replace(/\s+/g,' ');
+async function loadFaq(guildId:string){
+ const cached=faqCache.get(guildId);
+ if(cached&&cached.expires>Date.now())return cached.rules;
+ const events=await db.auditEvent.findMany({where:{guildId,event:'FAQ_RULE'},orderBy:{createdAt:'desc'},take:500,select:{detail:true}});
+ const rules=new Map<string,string>();
+ const seen=new Set<string>();
+ for(const event of events){
+  try{
+   const data=JSON.parse(event.detail??'') as FaqRule;
+   if(typeof data.trigger!=='string'||typeof data.answer!=='string'&&data.answer!==null)continue;
+   if(seen.has(data.trigger))continue;
+   seen.add(data.trigger);
+   if(data.answer!==null&&rules.size<100)rules.set(data.trigger,data.answer);
+  }catch{}
+ }
+ faqCache.set(guildId,{expires:Date.now()+60_000,rules});
+ return rules;
+}
 const suspiciousWords=/\b(?:free\s+(?:nitro|robux|money)|claim\s+(?:your\s+)?(?:reward|bonus)|withdrawal\s+success|deposit\s+to\s+(?:claim|unlock)|crypto\s+giveaway)\b/i;
 async function antiRaidLog(guildId:string,details:string){
  const guild=client.guilds.cache.get(guildId);
@@ -161,6 +183,17 @@ client.on(Events.MessageCreate,async message=>{
   if(!message.inGuild()||message.author.bot)return;
   try{
     if(await moderateSpam(message))return;
+    const faqText=normalizeFaq(message.content);
+    if(faqText.length>=3&&faqText.length<=100){
+      const faqKey=message.guildId+':'+message.channelId+':'+message.author.id;
+      if(Date.now()-(faqCooldown.get(faqKey)??0)>60_000){
+        const answer=(await loadFaq(message.guildId)).get(faqText);
+        if(answer){
+          faqCooldown.set(faqKey,Date.now());
+          await message.reply({content:answer,allowedMentions:{parse:[]}}).catch(e=>log.warn(e,'FAQ response failed'));
+        }
+      }
+    }
     const key=`${message.guildId}:${message.author.id}`,now=Date.now();
     const auto=await db.communityAutomation.findUnique({where:{guildId:message.guildId}});if(auto?.xpEnabled===false)return;
     if(now-(cooldown.get(key)??0)<(auto?.xpCooldownSeconds??60)*1000)return;
@@ -179,6 +212,23 @@ client.on(Events.InteractionCreate,async interaction=>{
     const privileged=['setup','security','announce'].includes(cmd);
     if(privileged && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){
       await interaction.reply({content:'Manage Server permission required.',flags:MessageFlags.Ephemeral});return;
+    }
+    if(cmd==='faq-set'||cmd==='faq-remove'||cmd==='faq-list'){
+      if(!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){await interaction.reply({content:'Reikia Manage Server teisės.',flags:MessageFlags.Ephemeral});return;}
+      if(cmd==='faq-list'){
+        const rules=await loadFaq(id);
+        const lines=[...rules.keys()].slice(0,30).map((trigger,i)=>(i+1)+'. '+trigger);
+        await interaction.reply({content:lines.length?'**Auto Responder frazės:**\n'+lines.join('\n'):'Automatinių atsakymų dar nėra.',flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});return;
+      }
+      const trigger=normalizeFaq(interaction.options.getString('trigger',true));
+      if(trigger.length<3||trigger.length>100){await interaction.reply({content:'Frazė turi būti 3–100 simbolių.',flags:MessageFlags.Ephemeral});return;}
+      const answer=cmd==='faq-set'?interaction.options.getString('answer',true).trim():null;
+      if(answer!==null&&(!answer||answer.length>1500)){await interaction.reply({content:'Atsakymas turi būti 1–1500 simbolių.',flags:MessageFlags.Ephemeral});return;}
+      const rules=await loadFaq(id);
+      if(answer!==null&&!rules.has(trigger)&&rules.size>=100){await interaction.reply({content:'Pasiektas 100 taisyklių limitas.',flags:MessageFlags.Ephemeral});return;}
+      await db.auditEvent.create({data:{guildId:id,event:'FAQ_RULE',actorId:interaction.user.id,detail:JSON.stringify({trigger,answer})}});
+      faqCache.delete(id);
+      await interaction.reply({content:answer!==null?'✅ Automatinis atsakymas išsaugotas.':'🗑️ Automatinis atsakymas išjungtas.',flags:MessageFlags.Ephemeral});return;
     }
     if(cmd==='apply'){
       const modal=new ModalBuilder().setCustomId('dg_staff_application').setTitle('Lextrum • Staff Application');
