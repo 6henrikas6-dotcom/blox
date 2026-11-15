@@ -213,6 +213,38 @@ client.on(Events.InteractionCreate,async interaction=>{
     if(privileged && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){
       await interaction.reply({content:'Manage Server permission required.',flags:MessageFlags.Ephemeral});return;
     }
+    if(cmd==='dm'||cmd==='dm-history'){
+      if(!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)){
+        await interaction.reply({content:'Ši komanda skirta tik serverio administratoriams.',flags:MessageFlags.Ephemeral});return;
+      }
+      if(cmd==='dm-history'){
+        const records=await db.auditEvent.findMany({where:{guildId:id,event:'ADMIN_DM_SENT'},orderBy:{createdAt:'desc'},take:interaction.options.getInteger('limit')??10});
+        const lines=records.map(x=>'• <t:'+Math.floor(x.createdAt.getTime()/1000)+':f> • admin: <@'+x.actorId+'> • gavėjas: <@'+(x.detail??'unknown')+'>');
+        await interaction.reply({content:lines.length?'📩 **DM siuntimo istorija** (žinučių turinys nesaugomas)\n'+lines.join('\n'):'Išsiųstų DM įrašų nėra.',flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});return;
+      }
+      const recipient=interaction.options.getUser('user',true);
+      const messageText=interaction.options.getString('message',true).trim();
+      if(recipient.bot||recipient.id===client.user?.id||recipient.id===interaction.user.id){
+        await interaction.reply({content:'Pasirink kitą tikrą narį (ne botą ir ne save).',flags:MessageFlags.Ephemeral});return;
+      }
+      if(!messageText||messageText.length>1800){
+        await interaction.reply({content:'Žinutė turi būti 1–1800 simbolių.',flags:MessageFlags.Ephemeral});return;
+      }
+      const member=await guild.members.fetch(recipient.id).catch(()=>null);
+      if(!member){await interaction.reply({content:'Gavėjas turi būti šio serverio narys.',flags:MessageFlags.Ephemeral});return;}
+      const since=new Date(Date.now()-24*60*60_000);
+      const recent=await db.auditEvent.findMany({where:{guildId:id,event:'ADMIN_DM_SENT',actorId:interaction.user.id,createdAt:{gte:since}},orderBy:{createdAt:'desc'},take:20,select:{createdAt:true}});
+      if(recent.length>=20){await interaction.reply({content:'Pasiektas 20 DM per 24 val. limitas.',flags:MessageFlags.Ephemeral});return;}
+      if(recent[0]&&Date.now()-recent[0].createdAt.getTime()<60_000){await interaction.reply({content:'Palauk 60 sekundžių prieš siųsdamas kitą DM.',flags:MessageFlags.Ephemeral});return;}
+      await interaction.deferReply({flags:MessageFlags.Ephemeral});
+      try{
+        await recipient.send({content:'📩 **'+guild.name.replace(/[@*_`~|]/g,'')+' administracijos žinutė**\n'+messageText+'\n\n_Siuntė serverio administratorius: '+interaction.user.username+'_ ',allowedMentions:{parse:[]}});
+      }catch{
+        await interaction.editReply('Nepavyko išsiųsti DM. Gavėjas gali būti išjungęs privačias žinutes.');return;
+      }
+      await db.auditEvent.create({data:{guildId:id,event:'ADMIN_DM_SENT',actorId:interaction.user.id,detail:recipient.id}});
+      await interaction.editReply('✅ DM sėkmingai išsiųsta <@'+recipient.id+'>. Žinutės turinys istorijoje nesaugomas.');return;
+    }
     if(cmd==='faq-set'||cmd==='faq-remove'||cmd==='faq-list'){
       if(!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){await interaction.reply({content:'Reikia Manage Server teisės.',flags:MessageFlags.Ephemeral});return;}
       if(cmd==='faq-list'){
