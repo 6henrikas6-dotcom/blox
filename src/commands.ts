@@ -50,5 +50,8 @@ export const commands = [
   .addStringOption(o=>o.setName('message').setDescription('Žinutės tekstas').setMinLength(1).setMaxLength(1800).setRequired(true)),
  new SlashCommandBuilder().setName('dm-history').setDescription('Peržiūrėti boto DM siuntimo istoriją').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addIntegerOption(o=>o.setName('limit').setDescription('Įrašų skaičius (1–15)').setMinValue(1).setMaxValue(15)),
+ new SlashCommandBuilder().setName('dm-update').setDescription('Siųsti atnaujinimą DM užsiprenumeravusiems nariams').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+  .addStringOption(o=>o.setName('title').setDescription('Atnaujinimo pavadinimas').setMinLength(3).setMaxLength(100).setRequired(true))
+  .addStringOption(o=>o.setName('message').setDescription('Atnaujinimo tekstas').setMinLength(5).setMaxLength(1500).setRequired(true)),
  new SlashCommandBuilder().setName('rank').setDescription('Show your activity XP')
 ].map(command=>command.toJSON());
