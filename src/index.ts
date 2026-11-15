@@ -213,6 +213,37 @@ client.on(Events.InteractionCreate,async interaction=>{
     if(privileged && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){
       await interaction.reply({content:'Manage Server permission required.',flags:MessageFlags.Ephemeral});return;
     }
+    if(cmd==='dm-update'){
+      if(!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)){
+        await interaction.reply({content:'Tik administratoriams.',flags:MessageFlags.Ephemeral});return;
+      }
+      const title=interaction.options.getString('title',true).trim();
+      const body=interaction.options.getString('message',true).trim();
+      if(title.length<3||title.length>100||body.length<5||body.length>1500){
+        await interaction.reply({content:'Patikrink pavadinimo ir teksto ilgį.',flags:MessageFlags.Ephemeral});return;
+      }
+      const recent=await db.auditEvent.findFirst({where:{guildId:id,event:'DM_UPDATE_BROADCAST',createdAt:{gte:new Date(Date.now()-24*60*60_000)}},orderBy:{createdAt:'desc'}});
+      if(recent){await interaction.reply({content:'Atnaujinimų DM galima siųsti ne dažniau kaip kartą per 24 valandas.',flags:MessageFlags.Ephemeral});return;}
+      const subscribers=await db.subscription.findMany({where:{guildId:id,enabled:true},select:{userId:true},take:101});
+      if(subscribers.length>100){await interaction.reply({content:'Yra daugiau nei 100 prenumeratorių. Masinis siuntimas sustabdytas – reikalinga atskira eilės sistema.',flags:MessageFlags.Ephemeral});return;}
+      if(!subscribers.length){await interaction.reply({content:'Nėra prenumeratorių. Nariai gali užsiprenumeruoti su /updates subscribe.',flags:MessageFlags.Ephemeral});return;}
+      await interaction.deferReply({flags:MessageFlags.Ephemeral});
+      await db.auditEvent.create({data:{guildId:id,event:'DM_UPDATE_BROADCAST',actorId:interaction.user.id,detail:JSON.stringify({title,recipients:subscribers.length})}});
+      let sent=0,failed=0,skipped=0;
+      for(const sub of subscribers){
+        try{
+          const current=await db.subscription.findUnique({where:{guildId_userId:{guildId:id,userId:sub.userId}}});
+          if(!current?.enabled){skipped++;continue;}
+          const member=await guild.members.fetch(sub.userId).catch(()=>null);
+          if(!member||member.user.bot){skipped++;continue;}
+          await member.send({content:'📢 **'+title.replace(/[@*_~`|]/g,'')+'**\n\n'+body+'\n\n_Šio serverio atnaujinimai. Atsisakyti: /updates unsubscribe_',allowedMentions:{parse:[]}});
+          sent++;
+        }catch(e){failed++;log.warn({err:e,userId:sub.userId},'Update DM delivery failed');}
+        await new Promise(resolve=>setTimeout(resolve,1100));
+      }
+      await db.auditEvent.create({data:{guildId:id,event:'DM_UPDATE_RESULT',actorId:interaction.user.id,detail:JSON.stringify({sent,failed,skipped})}});
+      await interaction.editReply('📨 Atnaujinimas išsiųstas. Pavyko: '+sent+' • nepavyko: '+failed+' • praleista: '+skipped+'. Tik užsiprenumeravusiems nariams.');return;
+    }
     if(cmd==='dm'||cmd==='dm-history'){
       if(!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)){
         await interaction.reply({content:'Ši komanda skirta tik serverio administratoriams.',flags:MessageFlags.Ephemeral});return;
