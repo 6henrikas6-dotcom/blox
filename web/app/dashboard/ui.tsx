@@ -1,7 +1,8 @@
 'use client';
 import { useState,useEffect } from 'react';
 type Automation={welcomeChannelId:string;goodbyeChannelId:string;inviteLogChannelId:string;levelChannelId:string;welcomeMessage:string;goodbyeMessage:string;levelMessage:string;xpEnabled:boolean;xpPerMessage:number;xpCooldownSeconds:number;levelUpEnabled:boolean;inviteTrackingEnabled:boolean};
-type Props={feedbackChannelId:string;savedTicket:{channelId:string;categoryId:string;roleId:string;message:string;optionsJson:string};automation:Automation;user:{id:string;username:string};guildName:string;memberCount:number|null;config:{joinThreshold:number;lockdown:boolean;logChannelId:string;announcementChannelId:string};channels:{id:string;name:string}[];categories:{id:string;name:string}[];roles:{id:string;name:string}[];events:{id:string;event:string;detail:string|null;createdAt:string}[];emojis:{id:string;name:string;animated:boolean}[]};
+type Analytics={ticketTotal:number;ticketOpen:number;ticketClosed:number;averageRating:number|null;giveawayCount:number;activeGiveaways:number;memberInviteCount:number;staff:{id:string;claimed:number;closed:number;ratingTotal:number;ratingCount:number}[]};
+type Props={analytics:Analytics;feedbackChannelId:string;savedTicket:{channelId:string;categoryId:string;roleId:string;message:string;optionsJson:string};automation:Automation;user:{id:string;username:string};guildName:string;memberCount:number|null;config:{joinThreshold:number;lockdown:boolean;logChannelId:string;announcementChannelId:string};channels:{id:string;name:string}[];categories:{id:string;name:string}[];roles:{id:string;name:string}[];events:{id:string;event:string;detail:string|null;createdAt:string}[];emojis:{id:string;name:string;animated:boolean}[]};
 
 type TicketQuestion={label:string;style:'short'|'paragraph';required:boolean};
 type TicketOption={label:string;description:string;emoji:string;questions:TicketQuestion[]};
@@ -9,7 +10,7 @@ type PanelButton={label:string;style:number;emoji:string;url:string};
 const defaultButton=(label:string,style:number,emoji:string):PanelButton=>({label,style,emoji,url:''});
 function emojiDisplay(value:string){const m=value.match(/^<a?:([^:]+):(\d+)>$/);return m?'🔹 '+m[1]:value;}
 function buttonCss(style:number){return {background:style===3?'#248046':style===4?'#da373c':style===2||style===5?'#4e5058':'#5865f2',color:'#fff',padding:'9px 15px',borderRadius:5,fontWeight:600,display:'inline-block',margin:'4px 5px 4px 0'};}
-type NavIconName='overview'|'security'|'announcements'|'partnerships'|'verification'|'tickets'|'giveaways'|'community'|'leveling'|'logs';
+type NavIconName='overview'|'security'|'announcements'|'partnerships'|'verification'|'tickets'|'giveaways'|'community'|'leveling'|'logs'|'staff'|'analytics';
 function NavIcon({name}:{name:NavIconName}){
  const common={fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round' as const,strokeLinejoin:'round' as const};
  const paths:Record<NavIconName,React.ReactNode>={
@@ -22,11 +23,13 @@ function NavIcon({name}:{name:NavIconName}){
   giveaways:<><rect x="3" y="9" width="18" height="12" rx="2"/><path d="M12 9v12M2 9h20V6H2z"/><path d="M12 6c-6 0-7-6-3-6 2 0 3 3 3 6zm0 0c6 0 7-6 3-6-2 0-3 3-3 6z" transform="translate(0 2)"/></>,
   community:<><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6m2 9h2v-2a6 6 0 0 0-4-5.6"/></>,
   leveling:<><path d="m12 2 3.1 6.4 7.1 1-5.1 5 .9 7.1-6-3.3-6 3.3.9-7.1-5.1-5 7.1-1z"/></>,
+  staff:<><circle cx="12" cy="7" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2M8 14l4 3 4-3"/></>,
+  analytics:<><path d="M3 20h18M5 16v-5m5 5V5m5 11V9m5 7V3"/></>,
   logs:<><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></>
  };
  return <svg width="19" height="19" viewBox="0 0 24 24" aria-hidden="true" focusable="false" {...common}>{paths[name]}</svg>;
 }
-export default function DashboardClient({feedbackChannelId,savedTicket,automation,user,guildName,memberCount,config,channels,categories,roles,events,emojis}:Props){
+export default function DashboardClient({analytics,feedbackChannelId,savedTicket,automation,user,guildName,memberCount,config,channels,categories,roles,events,emojis}:Props){
  const [tab,setTab]=useState('overview');
  const [feedbackChannel,setFeedbackChannel]=useState(feedbackChannelId);
  const [draftReady,setDraftReady]=useState(false);
@@ -138,7 +141,7 @@ export default function DashboardClient({feedbackChannelId,savedTicket,automatio
   }catch{setStatus('Nepavyko susisiekti su serveriu');}finally{setBusy(false);}
  }
  const [status,setStatus]=useState('');const [busy,setBusy]=useState(false);
- const menu:[NavIconName,string][]=[['overview','Overview'],['security','Security'],['announcements','Announcements'],['partnerships','Partnerships'],['verification','Verification'],['tickets','Tickets'],['giveaways','Giveaways'],['community','Joins & Invites'],['leveling','Leveling'],['logs','Audit Logs']];
+ const menu:[NavIconName,string][]=[['overview','Overview'],['security','Security'],['announcements','Announcements'],['partnerships','Partnerships'],['verification','Verification'],['tickets','Tickets'],['giveaways','Giveaways'],['community','Joins & Invites'],['leveling','Leveling'],['staff','Staff Performance'],['analytics','Server Analytics'],['logs','Audit Logs']];
  async function send(url:string,data:unknown){
   setBusy(true);setStatus('');
   try{const payload=data as Record<string,unknown>;const isPanel=url==='/api/panels';const form=new FormData();if(isPanel)for(const [key,value] of Object.entries(payload))form.set(key,String(value??''));const r=await fetch(url,isPanel?{method:'POST',body:form}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const j=await r.json();setStatus(r.ok?'✓ Išsaugota sėkmingai':j.error??'Įvyko klaida');if(r.ok&&url.includes('announce')){setTitle('');setDescription('');}}catch{setStatus('Nepavyko susisiekti su serveriu');}finally{setBusy(false);}
@@ -218,6 +221,8 @@ export default function DashboardClient({feedbackChannelId,savedTicket,automatio
  <label>Level-up channel<select value={community.levelChannelId} onChange={e=>changeCommunity('levelChannelId',e.target.value)}><option value="">Same channel as message</option>{channels.map(c=><option key={c.id} value={c.id}>#{c.name}</option>)}</select></label>
  <label>Level-up message<textarea rows={3} maxLength={1500} value={community.levelMessage} onChange={e=>changeCommunity('levelMessage',e.target.value)}/></label>
  <p>Naudok {'{user}'} ir {'{level}'} šablonus.</p><button className="primary" disabled={busy} onClick={()=>send('/api/community',community)}>Save leveling settings</button></section>}
+ {tab==='staff'&&<section className="panel"><h3>👥 Staff Performance</h3><p>Statistika pagal ticketų priskyrimus, uždarymus ir klientų įvertinimus.</p><div className="events">{analytics.staff.length===0?<p>Dar nėra darbuotojų statistikos.</p>:analytics.staff.map(member=><div className="event" key={member.id}><span className="eventicon">★</span><div><strong>{roles.find(r=>r.id===member.id)?.name??member.id}</strong><small>Priimta: {member.claimed} · Uždaryta: {member.closed} · Vidutinis įvertinimas: {member.ratingCount?(member.ratingTotal/member.ratingCount).toFixed(1)+'/5':'—'} ({member.ratingCount})</small></div></div>)}</div></section>}
+ {tab==='analytics'&&<section className="panel"><h3>📊 Server Analytics</h3><p>Reali statistika iš Lextrum duomenų bazės. Skaičiai atsinaujina perkrovus puslapį.</p><div className="events">{([['Server members',memberCount??'—'],['Tickets total',analytics.ticketTotal],['Open tickets',analytics.ticketOpen],['Closed tickets',analytics.ticketClosed],['Average staff rating',analytics.averageRating===null?'—':analytics.averageRating+'/5'],['Giveaways total',analytics.giveawayCount],['Active giveaways',analytics.activeGiveaways],['Tracked member invites',analytics.memberInviteCount]] as [string,string|number][]).map(([label,value])=><div className="event" key={label}><div><strong>{label}</strong><small>{value}</small></div></div>)}</div></section>}
  {tab==='logs'&&<section className="panel"><h3>Recent audit events</h3><p>Paskutiniai 30 užregistruotų veiksmų.</p><div className="events">{events.length===0?<p>Kol kas įvykių nėra.</p>:events.map(e=><div className="event" key={e.id}><span className="eventicon">▤</span><div><strong>{e.event}</strong><small>{e.detail??'No details'}</small></div><time>{new Date(e.createdAt).toLocaleString('lt-LT')}</time></div>)}</div></section>}
  <footer>Lextrum Dashboard • Private management console</footer></main></div>;
 }
