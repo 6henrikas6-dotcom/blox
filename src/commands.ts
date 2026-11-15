@@ -36,5 +36,8 @@ export const commands = [
   .addStringOption(o=>o.setName('status').setDescription('Nauja būsena').setRequired(true)
    .addChoices({name:'Pending',value:'pending'},{name:'Accepted',value:'accepted'},{name:'In Progress',value:'in_progress'},{name:'Implemented',value:'implemented'},{name:'Denied',value:'denied'}))
   .addStringOption(o=>o.setName('note').setDescription('Staff komentaras (nebūtina)').setMaxLength(500)),
+ new SlashCommandBuilder().setName('giveaway-reroll').setDescription('Išrinkti naują pasibaigusio giveaway laimėtoją').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .addStringOption(o=>o.setName('message_id').setDescription('Pasibaigusio giveaway Discord žinutės ID').setRequired(true))
+  .addIntegerOption(o=>o.setName('winners').setDescription('Kiek naujų laimėtojų (1–20)').setMinValue(1).setMaxValue(20)),
  new SlashCommandBuilder().setName('rank').setDescription('Show your activity XP')
 ].map(command=>command.toJSON());
