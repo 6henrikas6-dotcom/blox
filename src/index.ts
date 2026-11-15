@@ -18,6 +18,8 @@ const inviteCache=new Map<string,Map<string,{uses:number;inviterId:string|null}>
 
 const messageBursts=new Map<string,{at:number;signature:string;attachmentCount:number}[]>();
 const violations=new Map<string,{count:number;last:number}>();
+const riskyDomains=/(?:discord(?:-?nitro|-?gift|-?app)?\.(?:gift|click|top|xyz|ru)|(?:steam|roblox|discord)[-_.]?(?:free|bonus|verify|claim)\.(?:com|net|xyz|top)|bit\.ly|tinyurl\.com)\b/i;
+const suspiciousInvite=/https?:\/\/(?:discord\.gg|discord(?:app)?\.com\/invite)\/[^\s]+/i;
 const suspiciousWords=/\b(?:free\s+(?:nitro|robux|money)|claim\s+(?:your\s+)?(?:reward|bonus)|withdrawal\s+success|deposit\s+to\s+(?:claim|unlock)|crypto\s+giveaway)\b/i;
 async function antiRaidLog(guildId:string,details:string){
  const guild=client.guilds.cache.get(guildId);
@@ -42,8 +44,10 @@ async function moderateSpam(message:import('discord.js').Message<true>):Promise<
  const everyone=message.mentions.everyone || /<@&\d+>/.test(text) && message.mentions.roles.size>=4;
  const massMentions=message.mentions.users.size>=8;
  const suspiciousPromo=suspiciousWords.test(text) && (images>=2||/https?:\/\//i.test(text));
+ const phishing=riskyDomains.test(text) && (suspiciousWords.test(text)||/nitro|gift|verify|login|claim|free/i.test(text));
+ const inviteSpam=suspiciousInvite.test(text) && (history.filter(x=>now-x.at<45_000&&suspiciousInvite.test(x.signature)).length>=3);
  const flood=history.filter(x=>now-x.at<10_000).length>=7;
- const reason=everyone?'@everyone/@here arba masiniai role paminėjimai':massMentions?'Masiniai narių paminėjimai':duplicateCount>=3?'Pasikartojantis spam':(images>=4||recentImages>=8)?'Masinis nuotraukų spam':suspiciousPromo?'Įtartina reklama / scam':flood?'Žinučių flood':null;
+ const reason=phishing?'Įtartina phishing / scam nuoroda':inviteSpam?'Pasikartojančios Discord invite nuorodos':everyone?'@everyone/@here arba masiniai role paminėjimai':massMentions?'Masiniai narių paminėjimai':duplicateCount>=3?'Pasikartojantis spam':(images>=4||recentImages>=8)?'Masinis nuotraukų spam':suspiciousPromo?'Įtartina reklama / scam':flood?'Žinučių flood':null;
  if(!reason)return false;
  const deleted=await message.delete().then(()=>true).catch(()=>false);
  const state=violations.get(key),count=(state&&now-state.last<30*60_000?state.count:0)+1;
@@ -512,6 +516,26 @@ async function finishGiveaways(){
   }catch(e){log.error(e,'Could not announce giveaway result');}
  }
 }
+// Ticket SLA: one durable reminder per unclaimed ticket; no database migration needed.
+async function checkTicketSla(){
+ const thresholdMinutes=Math.max(5,Math.min(1440,Number(process.env.TICKET_SLA_MINUTES)||15));
+ const cutoff=new Date(Date.now()-thresholdMinutes*60_000);
+ const pending=await db.supportTicket.findMany({where:{status:'open',claimedById:null,createdAt:{lte:cutoff}},take:50});
+ for(const ticket of pending){
+  const marker='SLA:'+ticket.id;
+  const sent=await db.auditEvent.findFirst({where:{guildId:ticket.guildId,event:'TICKET_SLA_REMINDER',detail:marker}});
+  if(sent)continue;
+  const guild=client.guilds.cache.get(ticket.guildId);
+  if(!guild)continue;
+  const cfg=await db.communityPanel.findUnique({where:{guildId:ticket.guildId}});
+  const ch=await guild.channels.fetch(ticket.channelId).catch(()=>null);
+  if(!ch?.isTextBased()||!('send' in ch))continue;
+  const role=cfg?.supportRoleId?'<@&'+cfg.supportRoleId+'>':'Support komanda';
+  const delivered=await ch.send({content:'⏰ **Ticket SLA:** '+role+' — šis ticketas nepriimtas jau '+thresholdMinutes+' min. Paspauskite **Priimti / Claim**.',allowedMentions:{roles:cfg?.supportRoleId?[cfg.supportRoleId]:[]}}).then(()=>true).catch(e=>{log.warn({error:e,ticketId:ticket.id},'Ticket SLA delivery failed');return false;});
+  if(delivered)await audit(ticket.guildId,'TICKET_SLA_REMINDER',undefined,marker);
+ }
+}
+client.once(Events.ClientReady,()=>{setInterval(()=>checkTicketSla().catch(e=>log.error(e,'Ticket SLA scheduler')),5*60_000);checkTicketSla().catch(e=>log.error(e,'Ticket SLA initial check'));});
 client.once(Events.ClientReady,()=>{setInterval(()=>finishGiveaways().catch(e=>log.error(e,'Giveaway scheduler')),30_000);finishGiveaways().catch(e=>log.error(e));});
 
 const stop=async()=>{client.destroy();await db.$disconnect();process.exit(0);};
