@@ -45,5 +45,10 @@ export const commands = [
  new SlashCommandBuilder().setName('faq-remove').setDescription('Išjungti automatinį atsakymą').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .addStringOption(o=>o.setName('trigger').setDescription('Klausimas / frazė').setRequired(true)),
  new SlashCommandBuilder().setName('faq-list').setDescription('Peržiūrėti automatinio atsakiklio taisykles').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+ new SlashCommandBuilder().setName('dm').setDescription('Siųsti asmeninę žinutę nariui per botą').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+  .addUserOption(o=>o.setName('user').setDescription('Kam siųsti žinutę').setRequired(true))
+  .addStringOption(o=>o.setName('message').setDescription('Žinutės tekstas').setMinLength(1).setMaxLength(1800).setRequired(true)),
+ new SlashCommandBuilder().setName('dm-history').setDescription('Peržiūrėti boto DM siuntimo istoriją').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+  .addIntegerOption(o=>o.setName('limit').setDescription('Įrašų skaičius (1–15)').setMinValue(1).setMaxValue(15)),
  new SlashCommandBuilder().setName('rank').setDescription('Show your activity XP')
 ].map(command=>command.toJSON());
