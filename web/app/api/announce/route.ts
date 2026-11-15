@@ -18,8 +18,13 @@ export async function POST(req:NextRequest){
  const partnershipUrl=string(form.get('partnershipUrl')).trim();
  const buttonLabel=string(form.get('buttonLabel')).trim()||'Join partner server';
  if(partnershipUrl){
-  try{const u=new URL(partnershipUrl);if(u.protocol!=='https:'||!['discord.gg','discord.com','www.discord.com','discordapp.com'].includes(u.hostname)||!(/^(\\/invite\\/|\\/)[a-zA-Z0-9-]+\\/?$/.test(u.pathname))||u.username||u.password||u.search||u.hash)throw Error('Invalid invite');}
-  catch{return NextResponse.json({error:'Įrašyk teisingą Discord invite nuorodą (https://discord.gg/...)'},{status:400});}
+  try{
+   const u=new URL(partnershipUrl);
+   const validHost=['discord.gg','discord.com','www.discord.com','discordapp.com'].includes(u.hostname);
+   const segments=u.pathname.split('/').filter(Boolean);
+   const code=segments.length===1?segments[0]:segments.length===2&&segments[0]==='invite'?segments[1]:'';
+   if(u.protocol!=='https:'||!validHost||!code||!/^[a-zA-Z0-9-]+$/.test(code)||u.username||u.password||u.search||u.hash)throw Error('Invalid invite');
+  }catch{return NextResponse.json({error:'Įrašyk teisingą Discord invite nuorodą (https://discord.gg/...)'},{status:400});}
  }
  if(buttonLabel.length>80)return NextResponse.json({error:'Mygtuko tekstas per ilgas'},{status:400});
  if(roleId&&!/^\d{17,20}$/.test(roleId))return NextResponse.json({error:'Netinkamas rolės ID'},{status:400});
@@ -67,6 +72,10 @@ export async function POST(req:NextRequest){
  try{
   const res=await fetch(discordApi+'/channels/'+channelId+'/messages',{method:'POST',headers:{Authorization:'Bot '+token},body:data,cache:'no-store'});
   if(!res.ok)return NextResponse.json({error:'Discord atmetė pranešimą ('+res.status+'). Patikrink boto leidimus, failo dydį ir URL.'},{status:502});
+  const sent=await res.json() as {id?:string;components?:Array<{components?:Array<{type:number;url?:string}>}>};
+  if(partnershipUrl&&!sent.components?.some(row=>row.components?.some(button=>button.type===2&&button.url===partnershipUrl))){
+   return NextResponse.json({error:'Discord pranešimą paskelbė, bet Join mygtuko negrąžino. Patikrink kanalą ir pranešimą.',messageId:sent.id},{status:502});
+  }
   await db.auditEvent.create({data:{guildId,actorId:user.id,event:'DASHBOARD_ANNOUNCEMENT',detail:title||'Embed announcement'}}).catch(()=>{});
   return NextResponse.json({ok:true});
  }catch{return NextResponse.json({error:'Nepavyko susisiekti su Discord'},{status:502});}
