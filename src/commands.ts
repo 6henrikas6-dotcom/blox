@@ -39,5 +39,11 @@ export const commands = [
  new SlashCommandBuilder().setName('giveaway-reroll').setDescription('Išrinkti naują pasibaigusio giveaway laimėtoją').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .addStringOption(o=>o.setName('message_id').setDescription('Pasibaigusio giveaway Discord žinutės ID').setRequired(true))
   .addIntegerOption(o=>o.setName('winners').setDescription('Kiek naujų laimėtojų (1–20)').setMinValue(1).setMaxValue(20)),
+ new SlashCommandBuilder().setName('faq-set').setDescription('Sukurti arba pakeisti automatinį atsakymą').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .addStringOption(o=>o.setName('trigger').setDescription('Tikslus klausimas / frazė').setMinLength(3).setMaxLength(100).setRequired(true))
+  .addStringOption(o=>o.setName('answer').setDescription('Automatinis atsakymas').setMinLength(1).setMaxLength(1500).setRequired(true)),
+ new SlashCommandBuilder().setName('faq-remove').setDescription('Išjungti automatinį atsakymą').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .addStringOption(o=>o.setName('trigger').setDescription('Klausimas / frazė').setRequired(true)),
+ new SlashCommandBuilder().setName('faq-list').setDescription('Peržiūrėti automatinio atsakiklio taisykles').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
  new SlashCommandBuilder().setName('rank').setDescription('Show your activity XP')
 ].map(command=>command.toJSON());
