@@ -25,7 +25,7 @@ export async function POST(req:NextRequest){
   if(thumbnailUrl)embed.thumbnail={url:thumbnailUrl};
   if(image instanceof File){const ext=image.type==='image/png'?'png':image.type==='image/jpeg'?'jpg':image.type==='image/webp'?'webp':'gif';embed.image={url:'attachment://giveaway.'+ext};}
   else if(imageUrl)embed.image={url:imageUrl};
-  const payload={embeds:[embed],components:[{type:1,components:[{type:2,style:1,label:'🎉 Dalyvauti',custom_id:'dg_giveaway:'+id}]}],allowed_mentions:{parse:[]}};
+  const payload={embeds:[embed],components:[{type:1,components:[{type:2,style:1,label:'🎉 Dalyvauti • 0',custom_id:'dg_giveaway:'+id}]}],allowed_mentions:{parse:[]}};
   const multipart=new FormData();multipart.set('payload_json',JSON.stringify(payload));
   if(image instanceof File){const ext=image.type==='image/png'?'png':image.type==='image/jpeg'?'jpg':image.type==='image/webp'?'webp':'gif';multipart.set('files[0]',image,'giveaway.'+ext);}
   const response=await fetch('https://discord.com/api/v10/channels/'+channelId+'/messages',{method:'POST',headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN},body:multipart,cache:'no-store'});
