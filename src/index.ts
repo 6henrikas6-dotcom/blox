@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { randomInt } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { Client, GatewayIntentBits, Events, PermissionFlagsBits, ChannelType, EmbedBuilder, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder } from 'discord.js';
 import pino from 'pino';
@@ -204,6 +205,26 @@ client.on(Events.InteractionCreate,async interaction=>{
       const channel=interaction.options.getChannel('channel',true);
       await db.guildConfig.upsert({where:{guildId:id},create:{guildId:id,suggestionChannelId:channel.id},update:{suggestionChannelId:channel.id}});
       await interaction.reply({content:'💡 Pasiūlymų kanalas nustatytas: <#'+channel.id+'>',flags:MessageFlags.Ephemeral});return;
+    }
+    if(cmd==='giveaway-reroll'){
+      if(!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){await interaction.reply({content:'Reikia Manage Server teisės.',flags:MessageFlags.Ephemeral});return;}
+      const messageId=interaction.options.getString('message_id',true).trim();
+      if(!/^\d{17,20}$/.test(messageId)){await interaction.reply({content:'Neteisingas giveaway žinutės ID.',flags:MessageFlags.Ephemeral});return;}
+      const giveaway=await db.giveaway.findFirst({where:{guildId:id,messageId}});
+      if(!giveaway){await interaction.reply({content:'Giveaway nerastas.',flags:MessageFlags.Ephemeral});return;}
+      if(!giveaway.ended){await interaction.reply({content:'Reroll galimas tik pasibaigus giveaway.',flags:MessageFlags.Ephemeral});return;}
+      await interaction.deferReply({flags:MessageFlags.Ephemeral});
+      const entries=await db.giveawayEntry.findMany({where:{giveawayId:giveaway.id},select:{userId:true}});
+      const pool=entries.map(e=>e.userId);
+      if(!pool.length){await interaction.editReply('Giveaway neturi dalyvių.');return;}
+      const winners:string[]=[];
+      const requested=Math.min(interaction.options.getInteger('winners')??giveaway.winnerCount,pool.length);
+      while(winners.length<requested){winners.push(pool.splice(randomInt(pool.length),1)[0]);}
+      const channel=await guild.channels.fetch(giveaway.channelId).catch(()=>null);
+      if(!channel?.isTextBased()||!('send' in channel)){await interaction.editReply('Giveaway kanalas neprieinamas.');return;}
+      const message=await channel.send({content:'🎉 **Giveaway reroll** • '+giveaway.prize+'\nNauji laimėtojai: '+winners.map(userId=>'<@'+userId+'>').join(', '),allowedMentions:{users:winners}});
+      await audit(id,'GIVEAWAY_REROLL',interaction.user.id,giveaway.id+' '+winners.join(','));
+      await interaction.editReply('Nauji laimėtojai paskelbti: '+message.url);return;
     }
     if(cmd==='suggestion-status'){
       if(!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){await interaction.reply({content:'Reikia Manage Server teisės.',flags:MessageFlags.Ephemeral});return;}
@@ -565,7 +586,7 @@ async function finishGiveaways(){
    const entries=await db.giveawayEntry.findMany({where:{giveawayId:g.id}});
    const pool=entries.map(e=>e.userId);
    const winners:string[]=[];
-   while(pool.length&&winners.length<g.winnerCount){const i=Math.floor(Math.random()*pool.length);winners.push(pool.splice(i,1)[0]);}
+   while(pool.length&&winners.length<g.winnerCount){const i=randomInt(pool.length);winners.push(pool.splice(i,1)[0]);}
    const ch=await client.channels.fetch(g.channelId);
    if(ch?.isTextBased()&&'send' in ch){
     const original=await ch.messages.fetch(g.messageId).catch(()=>null);
