@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { randomInt } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
-import { Client, GatewayIntentBits, Events, PermissionFlagsBits, ChannelType, EmbedBuilder, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, Events, PermissionFlagsBits, ChannelType, EmbedBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder } from 'discord.js';
 import pino from 'pino';
 import { REST, Routes } from 'discord.js';
 import { commands } from './commands.js';
@@ -544,7 +544,11 @@ client.on(Events.InteractionCreate,async interaction=>{
    const channel=await guild.channels.create({name:(ticketType?ticketType.toLowerCase().normalize('NFKD').replace(/[^a-z0-9-]/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,32)+'-':'ticket-')+userId.slice(-6),type:ChannelType.GuildText,parent:cfg.ticketCategoryId??undefined,permissionOverwrites:overwrites,reason:'DevGuard support ticket'});
    try{await db.supportTicket.create({data:{guildId,userId,channelId:channel.id}});}catch(e){await channel.delete().catch(()=>{});throw e;}
    const row=new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('dg_ticket_claim').setLabel('Priimti / Claim').setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId('dg_ticket_close').setLabel('Uždaryti / Close').setStyle(ButtonStyle.Danger));
-   await channel.send({content:'🎫 **'+ticketType.replace(/[*_~`\\]/g,'')+'** • <@'+userId+'> '+(cfg.supportRoleId?'<@&'+cfg.supportRoleId+'>':''),embeds:[new EmbedBuilder().setTitle(subject).setDescription(details).setColor(0x8066f2)],components:[row],allowedMentions:{users:[userId],roles:cfg.supportRoleId?[cfg.supportRoleId]:[]}});
+   const ticketContainer=new ContainerBuilder().setAccentColor(0x8066f2)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent('🎫 **'+ticketType.replace(/[*_~`\\]/g,'')+'** • <@'+userId+'> '+(cfg.supportRoleId?'<@&'+cfg.supportRoleId+'>':'')))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent('**'+subject.replace(/\\*/g,'')+'**\\n\\n'+details.slice(0,3600)))
+    .addActionRowComponents(row);
+   await channel.send({flags:MessageFlags.IsComponentsV2,components:[ticketContainer],allowedMentions:{users:[userId],roles:cfg.supportRoleId?[cfg.supportRoleId]:[]}});
    await interaction.editReply('Ticketas sukurtas: <#'+channel.id+'>');
    await audit(guildId,'TICKET_OPEN',userId,(ticketType?ticketType+' • ':'')+channel.id);
    return;
