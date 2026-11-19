@@ -732,9 +732,13 @@ async function checkTicketSla(){
 client.once(Events.ClientReady,()=>{setInterval(()=>checkTicketSla().catch(e=>log.error(e,'Ticket SLA scheduler')),5*60_000);checkTicketSla().catch(e=>log.error(e,'Ticket SLA initial check'));});
 client.once(Events.ClientReady,()=>{setInterval(()=>finishGiveaways().catch(e=>log.error(e,'Giveaway scheduler')),30_000);finishGiveaways().catch(e=>log.error(e));});
 
-// Lextrum dashboard self-role dropdown. The allowed roles are recorded per message in AuditEvent.
+// Lextrum dashboard self-role buttons and dropdown. Allowed roles are recorded per message in AuditEvent.
 client.on(Events.InteractionCreate,async interaction=>{
- if(!interaction.isStringSelectMenu()||!interaction.inGuild()||interaction.customId!=='lx_selfroles')return;
+ if(!interaction.inGuild())return;
+ let selectedIds:string[];
+ if(interaction.isStringSelectMenu()&&interaction.customId==='lx_selfroles')selectedIds=interaction.values;
+ else if(interaction.isButton()&&interaction.customId.startsWith('lx_selfrole:'))selectedIds=[interaction.customId.slice('lx_selfrole:'.length)];
+ else return;
  try{
   const guild=interaction.guild!;
   const record=await db.auditEvent.findFirst({where:{guildId:guild.id,event:'SELF_ROLE_PANEL:'+interaction.message.id},select:{detail:true}});
@@ -746,7 +750,7 @@ client.on(Events.InteractionCreate,async interaction=>{
   }
   const allowed=(cfg as {roleIds:unknown[]}).roleIds;
   const permitted=new Set(allowed.filter((v):v is string=>typeof v==='string'&&/^\d{17,20}$/.test(v)));
-  if(!interaction.values.length||interaction.values.some(id=>!permitted.has(id))){
+  if(!selectedIds.length||selectedIds.some(id=>!permitted.has(id))){
    await interaction.reply({content:'Neleidžiamas rolės pasirinkimas.',flags:MessageFlags.Ephemeral});return;
   }
   await interaction.deferReply({flags:MessageFlags.Ephemeral});
@@ -757,7 +761,7 @@ client.on(Events.InteractionCreate,async interaction=>{
   }
   const updated:string[]=[],removed:string[]=[],failed:string[]=[];
   const dangerous=PermissionFlagsBits.Administrator|PermissionFlagsBits.ManageGuild|PermissionFlagsBits.ManageRoles|PermissionFlagsBits.BanMembers|PermissionFlagsBits.KickMembers|PermissionFlagsBits.ManageChannels|PermissionFlagsBits.ManageWebhooks;
-  for(const id of new Set(interaction.values)){
+  for(const id of new Set(selectedIds)){
    const role=await guild.roles.fetch(id).catch(()=>null);
    if(!role||role.managed||role.id===guild.id||role.position>=me.roles.highest.position||role.permissions.has(dangerous)){
     failed.push(id);continue;
