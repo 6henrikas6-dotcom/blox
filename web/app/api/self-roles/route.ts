@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   const highest=Math.max(0,...roles.filter(r=>guild.roles.includes(r.id)).map(r=>r.position));
   for(const option of options){
    const role=roles.find(r=>r.id===option.roleId);
-   if(!role||role.managed||role.id===guildId||role.position>=highest||(BigInt(role.permissions)&dangerous)!==0n)
+   if(!role||role.managed||role.id===guildId||role.position>=highest||(BigInt(role.permissions)&dangerous)!==BigInt(0))
     return NextResponse.json({error:'Rolė '+option.label+' yra valdoma, per aukšta arba turi pavojingas teises. Perkelk boto rolę aukščiau ir pasirink paprastą rolę.'},{status:400});
   }
   const parseEmoji=(value:string)=>{const m=value.match(/^<(a?):([A-Za-z0-9_]+):(\d{17,20})>$/);return m?{id:m[3],name:m[2],animated:m[1]==='a'}:value?{name:value}:undefined;};
