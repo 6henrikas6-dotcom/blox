@@ -706,14 +706,14 @@ client.on(Events.InteractionCreate,async interaction=>{
     if(message.flags.has(MessageFlags.IsComponentsV2)){
       const container=message.components.find(component=>component.type===17);
       if(container){
-        const data=container.toJSON() as {type:number;accent_color?:number;components?:Array<Record<string,unknown>>};
+        const data=container.toJSON() as unknown as {type:number;accent_color?:number;components?:Array<Record<string,unknown>>};
         const children=(data.components??[]).map(child=>{
           if(child.type!==1)return child;
           const buttons=(child.components as Array<{type:number;custom_id?:string}>|undefined)??[];
           return buttons.some(button=>button.custom_id==='dg_giveaway:'+id)
             ? {type:1,components:[row.components[0].toJSON()]}:child;
         });
-        await message.edit({components:[{type:17,accent_color:data.accent_color,components:children}]});
+        await message.edit({components:[{type:17,accent_color:data.accent_color,components:children} as unknown as ContainerBuilder]});
       }
     }else await message.edit({components:[row]});
    }
@@ -737,14 +737,14 @@ async function finishGiveaways(){
       if(original.flags.has(MessageFlags.IsComponentsV2)){
         const container=original.components.find(component=>component.type===17);
         if(container){
-          const data=container.toJSON() as {type:number;accent_color?:number;components?:Array<Record<string,unknown>>};
+          const data=container.toJSON() as unknown as {type:number;accent_color?:number;components?:Array<Record<string,unknown>>};
           const children=(data.components??[]).filter(child=>{
             if(child.type!==1)return true;
             const buttons=(child.components as Array<{custom_id?:string}>|undefined)??[];
             return !buttons.some(button=>button.custom_id==='dg_giveaway:'+g.id);
           });
           children.push({type:10,content:'**🔒 Giveaway baigėsi**'});
-          await original.edit({components:[{type:17,accent_color:data.accent_color,components:children}]}).catch(e=>log.warn(e,'Failed to finish V2 giveaway panel'));
+          await original.edit({components:[{type:17,accent_color:data.accent_color,components:children} as unknown as ContainerBuilder]}).catch(e=>log.warn(e,'Failed to finish V2 giveaway panel'));
         }
       }else await original.edit({components:[]}).catch(()=>{});
     }
