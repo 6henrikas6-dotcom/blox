@@ -1,11 +1,11 @@
 'use client';
 import {useEffect,useState} from 'react';
 type Channel={id:string;name:string};
-type Section={title:string;body:string};
+type Section={body:string};
 const initialRules:Section[]=[
- {title:'Pagarba bendruomenei',body:'Gerbk kitus narius, venk įžeidinėjimų ir patyčių.'},
- {title:'Jokio šlamšto',body:'Nesiųsk pasikartojančių žinučių, reklamos ar nepageidaujamų nuorodų.'},
- {title:'Laikykis Discord taisyklių',body:'Laikykis Discord naudojimo sąlygų ir serverio administratorių nurodymų.'}
+ {body:'Gerbk kitus narius, venk įžeidinėjimų ir patyčių.'},
+ {body:'Nesiųsk pasikartojančių žinučių, reklamos ar nepageidaujamų nuorodų.'},
+ {body:'Laikykis Discord naudojimo sąlygų ir serverio administratorių nurodymų.'}
 ];
 export function RulesGuidelines({channels}:{channels:Channel[]}){
  const [kind,setKind]=useState<'rules'|'guidelines'>('rules');
@@ -31,7 +31,7 @@ export function RulesGuidelines({channels}:{channels:Channel[]}){
    if(typeof obj.intro==='string')setIntro(obj.intro);
    if(typeof obj.footer==='string')setFooter(obj.footer);
    if(typeof obj.color==='string')setColor(obj.color);
-   if(Array.isArray(obj.sections)&&obj.sections.every(x=>x&&typeof x.title==='string'&&typeof x.body==='string'))setSections(obj.sections as Section[]);
+   if(Array.isArray(obj.sections)&&obj.sections.every(x=>x&&typeof x.body==='string'))setSections(obj.sections.map(x=>({body:x.body})) as Section[]);
   }catch{}
  },[]);
  useEffect(()=>{
@@ -43,14 +43,14 @@ export function RulesGuidelines({channels}:{channels:Channel[]}){
   setPreview(objectUrl);
   return ()=>URL.revokeObjectURL(objectUrl);
  },[image]);
- const update=(index:number,key:keyof Section,value:string)=>setSections(before=>before.map((section,i)=>i===index?{...section,[key]:value}:section));
+ const update=(index:number,value:string)=>setSections(before=>before.map((section,i)=>i===index?{...section,body:value}:section));
  const changeKind=(next:'rules'|'guidelines')=>{
   setKind(next);
   setTitle(next==='rules'?'Lextrum Server Rules':'Lextrum Community Guidelines');
   setIntro(next==='rules'?'Prieš dalyvaudamas mūsų bendruomenėje perskaityk šias taisykles.':'Mūsų bendruomenės elgesio ir bendravimo gairės.');
  };
  async function publish(){
-  if(!channel||!title.trim()||!sections.length||sections.some(s=>!s.title.trim()||!s.body.trim())){setStatus('Pasirink kanalą ir užpildyk visas taisykles.');return;}
+  if(!channel||!title.trim()||!sections.length||sections.some(s=>!s.body.trim())){setStatus('Pasirink kanalą ir užpildyk visas taisykles.');return;}
   setBusy(true);setStatus('');setUrl('');
   try{
    const form=new FormData();
@@ -82,14 +82,13 @@ export function RulesGuidelines({channels}:{channels:Channel[]}){
    <div className="ticket-sections"><h3>📋 Taisyklės ir gairės</h3>
     <p>Gali pridėti iki 15 skyrių. Punktai numeruojami §1.0, §1.1 ... §1.9, §2.0 vienoje V2 panelėje.</p>
     {sections.map((section,index)=><div className="ticket-section-editor" key={index}>
-     <div className="ticket-section-header"><strong>§{Math.floor(index/10)+1}.{index%10} skyrius</strong><button type="button" className="secondary" disabled={sections.length<=1} onClick={()=>setSections(before=>before.filter((_,i)=>i!==index))}>✕ Pašalinti</button></div>
-     <label>Pavadinimas<input maxLength={100} value={section.title} onChange={e=>update(index,'title',e.target.value)}/></label>
-     <label>Tekstas<textarea rows={4} maxLength={1200} value={section.body} onChange={e=>update(index,'body',e.target.value)}/></label>
+     <div className="ticket-section-header"><strong>§{Math.floor(index/10)+1}.{index%10}</strong><button type="button" className="secondary" disabled={sections.length<=1} onClick={()=>setSections(before=>before.filter((_,i)=>i!==index))}>✕ Pašalinti</button></div>
+     <label>Tekstas<textarea rows={4} maxLength={1200} value={section.body} onChange={e=>update(index,e.target.value)}/></label>
     </div>)}
-    <button type="button" className="secondary" disabled={sections.length>=15} onClick={()=>setSections(before=>[...before,{title:'Nauja taisyklė',body:''}])}>+ Pridėti skyrių</button>
+    <button type="button" className="secondary" disabled={sections.length>=15} onClick={()=>setSections(before=>[...before,{body:''}])}>+ Pridėti skyrių</button>
    </div>
    <label>Poraštė<input maxLength={500} value={footer} onChange={e=>setFooter(e.target.value)}/></label>
-   <button type="button" className="primary" disabled={busy||!channel||!title.trim()||!sections.length||sections.some(s=>!s.title.trim()||!s.body.trim())} onClick={publish}>{busy?'Skelbiama...':'🚀 Paskelbti Discord kanale'}</button>
+   <button type="button" className="primary" disabled={busy||!channel||!title.trim()||!sections.length||sections.some(s=>!s.body.trim())} onClick={publish}>{busy?'Skelbiama...':'🚀 Paskelbti Discord kanale'}</button>
    {status&&<p role="status" style={{color:status.startsWith('✅')?'#82ddb2':'#ffc6a5'}}>{status}</p>}
    {url&&<p><a href={url} target="_blank" rel="noopener noreferrer" style={{color:'#bba9ff'}}>Atidaryti paskelbtą pranešimą Discord ↗</a></p>}
    <p style={{fontSize:12}}>Juodraštis išsaugomas tavo naršyklėje. Nuotrauką po perkrovimo reikės įkelti iš naujo. Skelbiant sukuriamas naujas pranešimas.</p>
@@ -102,7 +101,7 @@ export function RulesGuidelines({channels}:{channels:Channel[]}){
      {intro&&<p style={{whiteSpace:'pre-wrap'}}>{intro}</p>}
      {preview&&<img className="self-role-top-image" src={preview} alt="Rules banner"/>}
      {sections.map((section,index)=><div key={index} className="embed-field">
-      <strong>§{Math.floor(index/10)+1}.{index%10} {section.title||'Skyriaus pavadinimas'}</strong><p style={{whiteSpace:'pre-wrap'}}>{section.body||'Skyriaus tekstas...'}</p>
+      <strong>§{Math.floor(index/10)+1}.{index%10}</strong><p style={{whiteSpace:'pre-wrap'}}>{section.body||'Skyriaus tekstas...'}</p>
      </div>)}
      {footer&&<small className="embed-footer">{footer}</small>}
     </div>
