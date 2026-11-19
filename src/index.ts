@@ -514,20 +514,15 @@ client.on(Events.InteractionCreate,async interaction=>{
   }
   if(interaction.customId==='dg_ticket_cancel'&&interaction.isButton()){await interaction.update({content:'❌ Ticket kūrimas atšauktas.',components:[]});return;}
   if(interaction.customId==='dg_ticket_close_cancel'&&interaction.isButton()){await interaction.update({content:'Ticketas paliktas atidarytas.',components:[]});return;}
-  if(interaction.customId==='dg_ticket_open'||interaction.customId==='dg_ticket_select'){
-   const ticketType=interaction.isStringSelectMenu()?interaction.values[0]:'General';
+  // Open the question modal directly after a category selection; no intermediate confirmation.
+  // Keep legacy confirmation clicks functional for already-sent ephemeral messages.
+  if(interaction.customId==='dg_ticket_open'||interaction.customId==='dg_ticket_select'||interaction.customId.startsWith('dg_ticket_confirm:')){
+   if(!interaction.isButton()&&!interaction.isStringSelectMenu())return;
+   const ticketType=interaction.isStringSelectMenu()?interaction.values[0]:
+    interaction.customId.startsWith('dg_ticket_confirm:')?decodeURIComponent(interaction.customId.slice('dg_ticket_confirm:'.length)):'General';
    if(!ticketType.trim()||ticketType.length>70){await interaction.reply({content:'Netinkamas ticket pasirinkimas.',flags:MessageFlags.Ephemeral});return;}
    const existing=await db.supportTicket.findFirst({where:{guildId,userId,status:'open'}});
    if(existing){await interaction.reply({content:'Jau turi atidarytą ticketą: <#'+existing.channelId+'>',flags:MessageFlags.Ephemeral});return;}
-   const row=new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('dg_ticket_confirm:'+encodeURIComponent(ticketType)).setLabel('Tęsti / Continue').setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId('dg_ticket_cancel').setLabel('Atšaukti / Cancel').setStyle(ButtonStyle.Secondary));
-   await interaction.reply({content:'🎫 **'+ticketType+'**\nPrieš atidarant ticketą reikės užpildyti pagalbos formą. Ar nori tęsti?',components:[row],flags:MessageFlags.Ephemeral});return;
-  }
-  if(interaction.customId.startsWith('dg_ticket_confirm:')){
-   if(!interaction.isButton())return;
-   const ticketType=decodeURIComponent(interaction.customId.slice('dg_ticket_confirm:'.length));
-   if(!ticketType||ticketType.length>70)return;
-   const existing=await db.supportTicket.findFirst({where:{guildId,userId,status:'open'}});
-   if(existing){await interaction.reply({content:'Jau turi atidarytą ticketą.',flags:MessageFlags.Ephemeral});return;}
    type TicketQuestion={label:string;style:'short'|'paragraph';required:boolean};
    let options:{label:string;questions?:TicketQuestion[]}[]=[];
    try{options=JSON.parse(cfg.ticketOptionsJson??'[]');}catch{}
