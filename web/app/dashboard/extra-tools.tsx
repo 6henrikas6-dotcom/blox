@@ -107,7 +107,8 @@ export function SelfRoles({channels,roles}:Shared){
  <section className="panel preview"><h3>👁 Discord peržiūra</h3><div className="discord-preview"><div className="discord-msg-head"><span className="discord-avatar">L</span><strong>Lextrum Bot <small>BOT</small></strong></div><div className="embed rich-embed self-role-embed" style={{borderLeftColor:color}}>
  {(topPreview||image)&&<img className="self-role-top-image" src={topPreview||image} alt="Viršutinis baneris"/>}
  <strong className="embed-title">{title}</strong><p>{body}</p>
- {footer&&<small className="embed-footer">{footer}</small>}
+ {presentation==='buttons'?<div className="self-role-button-preview">{selected.map(id=><span key={id} className="self-role-preview-button">{emojis[id]||'🎭'} {labels[id]||roles.find(r=>r.id===id)?.name}</span>)}</div>:<div className="ticket-select-preview"><div className="ticket-select-placeholder">Pasirink roles <span>⌄</span></div>{selected.map(id=><div className="ticket-select-option" key={id}><span className="ticket-option-emoji">{emojis[id]||'🎭'}</span><span>{labels[id]||roles.find(r=>r.id===id)?.name}</span></div>)}</div>}
  {bottomPreview&&<img className="self-role-bottom-image" src={bottomPreview} alt="Apatinis baneris"/>}
- </div>{presentation==='buttons'?<div className="self-role-button-preview">{selected.map(id=><span key={id} className="self-role-preview-button">{emojis[id]||'🎭'} {labels[id]||roles.find(r=>r.id===id)?.name}</span>)}</div>:<div className="ticket-select-preview"><div className="ticket-select-placeholder">Pasirink roles <span>⌄</span></div>{selected.map(id=><div className="ticket-select-option" key={id}><span className="ticket-option-emoji">{emojis[id]||'🎭'}</span><span>{labels[id]||roles.find(r=>r.id===id)?.name}</span></div>)}</div>}</div><p style={inputHint}>Pasirinkti nariai galės turėti kelis iš šio panelio vaidmenų.</p></section></div>;
+ {footer&&<small className="embed-footer">{footer}</small>}
+ </div></div><p style={inputHint}>Pasirinkti nariai galės turėti kelis iš šio panelio vaidmenų.</p></section></div>;
 }
