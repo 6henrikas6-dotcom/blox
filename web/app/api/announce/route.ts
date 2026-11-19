@@ -45,18 +45,6 @@ export async function POST(req:NextRequest){
   const channel=await channelRes.json() as {guild_id?:string;type?:number};
   if(channel.guild_id!==guildId||![0,5].includes(channel.type??-1))return NextResponse.json({error:'Pasirink tekstinį kanalą šiame serveryje'},{status:400});
  }catch{return NextResponse.json({error:'Nepavyko patikrinti kanalo'},{status:502});}
- const embeds=[] as Record<string,unknown>[];
- if(title||description||file||imageUrl||thumbnailUrl||footer||author){
-  const embed:Record<string,unknown>={color:/^#[0-9a-fA-F]{6}$/.test(color)?parseInt(color.slice(1),16):5793266};
-  if(title)embed.title=title;
-  if(description)embed.description=description;
-  if(footer)embed.footer={text:footer};
-  if(author)embed.author={name:author};
-  if(thumbnailUrl)embed.thumbnail={url:thumbnailUrl};
-  if(file instanceof File)embed.image={url:'attachment://'+(file.type==='image/png'?'image.png':file.type==='image/jpeg'?'image.jpg':file.type==='image/webp'?'image.webp':'image.gif')};
-  else if(imageUrl)embed.image={url:imageUrl};
-  embeds.push(embed);
- }
  let selectedRole='';
  if(roleId){
   try{
@@ -68,8 +56,21 @@ export async function POST(req:NextRequest){
   }catch{return NextResponse.json({error:'Nepavyko patikrinti rolės'},{status:502});}
  }
  const mentionText=[pingEveryone?'@everyone':'',selectedRole?'<@&'+selectedRole+'>':''].filter(Boolean).join(' ');
- const components=partnershipUrl?[{type:1,components:[{type:2,style:5,label:buttonLabel,url:partnershipUrl}]}]:[];
- const payload={content:[mentionText,content].filter(Boolean).join('\n'),embeds,components,allowed_mentions:{parse:pingEveryone?['everyone']:[],roles:selectedRole?[selectedRole]:[]}};
+ const accent=/^#[0-9a-fA-F]{6}$/.test(color)?parseInt(color.slice(1),16):5793266;
+ const children:Record<string,unknown>[]=[];
+ const textParts=[mentionText,content,author?'**'+author.replace(/\*/g,'')+'**':'',title?'**'+title.replace(/\*/g,'')+'**':'',description].filter(Boolean);
+ const textContent=textParts.join('\n\n');
+ if(textContent.length>4000)return NextResponse.json({error:'Pranešimo tekstas per ilgas Components V2 (iki 4000 simbolių).'}, {status:400});
+ if(textContent){
+  if(thumbnailUrl)children.push({type:9,components:[{type:10,content:textContent}],accessory:{type:11,media:{url:thumbnailUrl}}});
+  else children.push({type:10,content:textContent});
+ }
+ const banner=file instanceof File?'attachment://'+(file.type==='image/png'?'image.png':file.type==='image/jpeg'?'image.jpg':file.type==='image/webp'?'image.webp':'image.gif'):imageUrl;
+ if(banner)children.push({type:12,items:[{media:{url:banner}}]});
+ if(partnershipUrl)children.push({type:1,components:[{type:2,style:5,label:buttonLabel,url:partnershipUrl}]});
+ if(footer)children.push({type:10,content:'-# '+footer.slice(0,1000).replace(/\n/g,' ')});
+ if(!children.length)return NextResponse.json({error:'Pranešimas negali būti tuščias.'},{status:400});
+ const payload:Record<string,unknown>={flags:32768,components:[{type:17,accent_color:accent,components:children}],allowed_mentions:{parse:pingEveryone?['everyone']:[],roles:selectedRole?[selectedRole]:[]}};
  const data=new FormData();data.set('payload_json',JSON.stringify(payload));
  if(file instanceof File){const name=file.type==='image/png'?'image.png':file.type==='image/jpeg'?'image.jpg':file.type==='image/webp'?'image.webp':'image.gif';data.set('files[0]',file,name);}
  try{
@@ -97,9 +98,7 @@ export async function POST(req:NextRequest){
   const res=await fetch(discordApi+'/channels/'+channelId+'/messages',{method:'POST',headers:{Authorization:'Bot '+token},body:data,cache:'no-store'});
   if(!res.ok)return NextResponse.json({error:'Discord atmetė pranešimą ('+res.status+'). Patikrink boto leidimus, failo dydį ir URL.'},{status:502});
   const sent=await res.json() as {id?:string;components?:Array<{components?:Array<{type:number;url?:string}>}>};
-  if(partnershipUrl&&!sent.components?.some(row=>row.components?.some(button=>button.type===2&&button.url===partnershipUrl))){
-   return NextResponse.json({error:'Discord pranešimą paskelbė, bet Join mygtuko negrąžino. Patikrink kanalą ir pranešimą.',messageId:sent.id},{status:502});
-  }
+
   await db.auditEvent.create({data:{guildId,actorId:user.id,event:partnershipUrl?'PARTNERSHIP_PUBLISHED':'DASHBOARD_ANNOUNCEMENT',detail:JSON.stringify({title:title||'Embed announcement',channelId,messageId:sent.id??'',partnerUrl:partnershipUrl||undefined})}}).catch(()=>{});
   return NextResponse.json({ok:true});
  }catch{return NextResponse.json({error:'Nepavyko susisiekti su Discord'},{status:502});}
