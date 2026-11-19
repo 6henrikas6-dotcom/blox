@@ -373,7 +373,7 @@ client.on(Events.InteractionCreate,async interaction=>{
       if(v2Data?.components&&v2Valid){
         const updated=v2Data.components.map(child=>{
           if(child.type!==10||!child.content?.startsWith('**Būsena:**'))return child;
-          return {...child,content:'**Būsena:** '+(labels[status]??status)+(note?'\\n**Staff komentaras:** '+note.slice(0,500):'')+'\\n-# 👍 Pritariu • 👎 Nepritariu'};
+          return {...child,content:'**Būsena:** '+(labels[status]??status)+(note?'\n**Staff komentaras:** '+note.slice(0,500):'')+'\n-# 👍 Pritariu • 👎 Nepritariu'};
         });
         await post.edit({components:[{type:17,accent_color:colors[status]??0x8066f2,components:updated} as unknown as ContainerBuilder],allowedMentions:{parse:[]}});
       }else{
@@ -395,11 +395,11 @@ client.on(Events.InteractionCreate,async interaction=>{
       const channel=await guild.channels.fetch(cfg.suggestionChannelId).catch(()=>null);
       if(!channel||channel.type!==ChannelType.GuildText){await interaction.reply({content:'Pasiūlymų kanalas nerastas arba neprieinamas.',flags:MessageFlags.Ephemeral});return;}
       await interaction.deferReply({flags:MessageFlags.Ephemeral});
-      const proposalContent='**💡 Naujas pasiūlymas**\\n\\n'+idea+'\\n\\n**Autorius:** <@'+interaction.user.id+'>'+(reason?'\\n\\n**Kodėl?**\\n'+reason:'');
+      const proposalContent='**💡 Naujas pasiūlymas**\n\n'+idea+'\n\n**Autorius:** <@'+interaction.user.id+'>'+(reason?'\n\n**Kodėl?**\n'+reason:'');
       if(proposalContent.length>3900){await interaction.editReply('Pasiūlymas per ilgas V2 panelei.');return;}
       const proposalChildren:Record<string,unknown>[]=[{type:10,content:proposalContent}];
       if(attachment)proposalChildren.push({type:12,items:[{media:{url:attachment.url}}]});
-      proposalChildren.push({type:10,content:'**Būsena:** ⏳ Pending\\n-# 👍 Pritariu • 👎 Nepritariu'});
+      proposalChildren.push({type:10,content:'**Būsena:** ⏳ Pending\n-# 👍 Pritariu • 👎 Nepritariu'});
       const posted=await channel.send({flags:MessageFlags.IsComponentsV2,components:[{type:17,accent_color:0x8066f2,components:proposalChildren} as unknown as ContainerBuilder],allowedMentions:{parse:[]}});
       await Promise.allSettled([posted.react('👍'),posted.react('👎')]);
       await db.auditEvent.create({data:{guildId:id,event:'SUGGESTION',actorId:interaction.user.id,detail:posted.id}});
