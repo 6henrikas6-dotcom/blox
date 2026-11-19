@@ -703,7 +703,19 @@ client.on(Events.InteractionCreate,async interaction=>{
    if(channel?.isTextBased()&&'messages' in channel){
     const message=await channel.messages.fetch(giveaway.messageId);
     const row=new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId('dg_giveaway:'+id).setLabel('🎉 Dalyvauti • '+count).setStyle(ButtonStyle.Primary));
-    await message.edit({components:[row]});
+    if(message.flags.has(MessageFlags.IsComponentsV2)){
+      const container=message.components.find(component=>component.type===17);
+      if(container){
+        const data=container.toJSON() as {type:number;accent_color?:number;components?:Array<Record<string,unknown>>};
+        const children=(data.components??[]).map(child=>{
+          if(child.type!==1)return child;
+          const buttons=(child.components as Array<{type:number;custom_id?:string}>|undefined)??[];
+          return buttons.some(button=>button.custom_id==='dg_giveaway:'+id)
+            ? {type:1,components:[row.components[0].toJSON()]}:child;
+        });
+        await message.edit({components:[{type:17,accent_color:data.accent_color,components:children}]});
+      }
+    }else await message.edit({components:[row]});
    }
   }catch(e){log.warn({error:e,giveawayId:id},'Could not refresh giveaway participant count');}
  }catch(e){log.error(e,'Giveaway button');if(!interaction.replied)await interaction.reply({content:'Nepavyko. Bandyk dar kartą.',flags:MessageFlags.Ephemeral}).catch(()=>{});}
@@ -721,7 +733,21 @@ async function finishGiveaways(){
    const ch=await client.channels.fetch(g.channelId);
    if(ch?.isTextBased()&&'send' in ch){
     const original=await ch.messages.fetch(g.messageId).catch(()=>null);
-    if(original)await original.edit({components:[]}).catch(()=>{});
+    if(original){
+      if(original.flags.has(MessageFlags.IsComponentsV2)){
+        const container=original.components.find(component=>component.type===17);
+        if(container){
+          const data=container.toJSON() as {type:number;accent_color?:number;components?:Array<Record<string,unknown>>};
+          const children=(data.components??[]).filter(child=>{
+            if(child.type!==1)return true;
+            const buttons=(child.components as Array<{custom_id?:string}>|undefined)??[];
+            return !buttons.some(button=>button.custom_id==='dg_giveaway:'+g.id);
+          });
+          children.push({type:10,content:'**🔒 Giveaway baigėsi**'});
+          await original.edit({components:[{type:17,accent_color:data.accent_color,components:children}]}).catch(e=>log.warn(e,'Failed to finish V2 giveaway panel'));
+        }
+      }else await original.edit({components:[]}).catch(()=>{});
+    }
     await ch.send({content:winners.length?'🎉 Giveaway baigėsi! **'+g.prize+'**\nLaimėtojai: '+winners.map(id=>'<@'+id+'>').join(', '):'Giveaway baigėsi: **'+g.prize+'**. Dalyvių nebuvo.',allowedMentions:{users:winners}});
    }
    await audit(g.guildId,'GIVEAWAY_ENDED',undefined,g.prize);
