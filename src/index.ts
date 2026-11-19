@@ -436,7 +436,9 @@ client.on(Events.InteractionCreate,async interaction=>{
       const pingRole=interaction.options.getRole('role');
       if((pingEveryone||pingRole)&&!interaction.memberPermissions?.has(PermissionFlagsBits.MentionEveryone)){await interaction.reply({content:'Norint žymėti @everyone arba roles reikia Mention Everyone teisės.',flags:MessageFlags.Ephemeral});return;}
       const pingText=[pingEveryone?'@everyone':null,pingRole?'<@&'+pingRole.id+'>':null].filter(Boolean).join(' ');
-      await ch.send({content:pingText||undefined,embeds:[new EmbedBuilder().setTitle(interaction.options.getString('title',true)).setDescription(interaction.options.getString('body',true)).setColor(0x5865f2).setTimestamp()],allowedMentions:{parse:pingEveryone?['everyone']:[],roles:pingRole?[pingRole.id]:[]}});
+      const announceText=[pingText,'**'+interaction.options.getString('title',true)+'**',interaction.options.getString('body',true)].filter(Boolean).join('\n\n');
+      const announcePanel=new ContainerBuilder().setAccentColor(0x5865f2).addTextDisplayComponents(new TextDisplayBuilder().setContent(announceText.slice(0,4000)));
+      await ch.send({flags:MessageFlags.IsComponentsV2,components:[announcePanel],allowedMentions:{parse:pingEveryone?['everyone']:[],roles:pingRole?[pingRole.id]:[]}});
 
       await interaction.reply({content:'Announcement posted (no DMs sent).',flags:MessageFlags.Ephemeral});
       await audit(id,'ANNOUNCE',interaction.user.id);return;
@@ -471,13 +473,11 @@ client.on(Events.InteractionCreate,async interaction=>{
   if(!cfg?.logChannelId){await interaction.editReply('Staff paraiškoms administratorius turi nustatyti log kanalą per /setup.');return;}
   const channel=await interaction.guild!.channels.fetch(cfg.logChannelId).catch(()=>null);
   if(!channel?.isTextBased()||!('send' in channel)){await interaction.editReply('Staff paraiškų kanalas neprieinamas.');return;}
-  const embed=new EmbedBuilder().setTitle('📋 Nauja staff paraiška').setColor(0x5865f2).addFields(
-   {name:'Kandidatas',value:'<@'+interaction.user.id+'>'},
-   {name:'Motyvacija',value:motivation.slice(0,1024)},
-   {name:'Patirtis',value:experience.slice(0,1024)},
-   {name:'Prieinamumas',value:availability.slice(0,1024)}
-  ).setTimestamp();
-  const sent=await channel.send({embeds:[embed],allowedMentions:{parse:[]}});
+  const staffText=['**📋 Nauja staff paraiška**','**Kandidatas:** <@'+interaction.user.id+'>','**Motyvacija:**\n'+motivation.slice(0,1024),'**Patirtis:**\n'+experience.slice(0,1024),'**Prieinamumas:**\n'+availability.slice(0,1024)].join('\n\n');
+  const staffPanel=new ContainerBuilder().setAccentColor(0x5865f2);
+  // The two text blocks stay under Discord's 4000-character Text Display limit.
+  staffPanel.addTextDisplayComponents(new TextDisplayBuilder().setContent(staffText.slice(0,4000)));
+  const sent=await channel.send({flags:MessageFlags.IsComponentsV2,components:[staffPanel],allowedMentions:{parse:[]}});
   await db.auditEvent.create({data:{guildId,event:'STAFF_APPLICATION',actorId:interaction.user.id,detail:sent.id}});
   await interaction.editReply('✅ Paraiška pateikta staff komandai. Ačiū!');
  }catch(e){log.error(e,'Staff application failed');if(interaction.deferred)await interaction.editReply('Nepavyko pateikti paraiškos.').catch(()=>{});}
