@@ -30,3 +30,9 @@
 .self-role-preview-button{display:inline-block;max-width:100%;padding:9px 13px;border-radius:5px;background:#4e5058;color:#f2f3f5;font-size:13px;font-weight:650;overflow-wrap:anywhere}
 .role-option{padding:12px 0;border-top:1px solid #30354a}
 @media(max-width:1000px){.self-role-button-preview{margin-left:0}}
+
+/* Self-Roles: wide top banner and a slim footer banner (matching the Discord example). */
+.self-role-embed{max-width:680px!important;padding:14px 16px!important}
+.self-role-top-image,.self-role-bottom-image{display:block;width:100%;object-fit:cover;border-radius:8px}
+.self-role-top-image{aspect-ratio:1200 / 390;margin:0 0 16px}
+.self-role-bottom-image{aspect-ratio:1200 / 100;margin-top:14px}
