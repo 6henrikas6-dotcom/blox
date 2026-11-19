@@ -36,3 +36,10 @@
 .self-role-top-image,.self-role-bottom-image{display:block;width:100%;object-fit:cover;border-radius:8px}
 .self-role-top-image{aspect-ratio:1200 / 390;margin:0 0 16px}
 .self-role-bottom-image{aspect-ratio:1200 / 100;margin-top:14px}
+
+/* Components V2 preview: all media, role buttons and text share the same container. */
+.preview .self-role-embed{margin-top:12px;max-width:680px!important;background:#393a41!important;border:1px solid #555761;border-left:4px solid #8066f2;box-shadow:none}
+.self-role-embed .self-role-button-preview{margin:16px 0 0;display:flex;flex-wrap:wrap;gap:8px}
+.self-role-embed .ticket-select-preview{margin:15px 0 0;max-width:100%}
+.self-role-embed .self-role-top-image{width:100%;max-width:100%;object-fit:cover}
+.self-role-embed .self-role-bottom-image{width:100%;max-width:100%;object-fit:cover;margin-top:14px}
