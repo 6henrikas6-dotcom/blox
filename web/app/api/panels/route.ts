@@ -49,7 +49,23 @@ export async function POST(req:NextRequest){
   const components:unknown[]=[];
   if(selector)components.push({type:1,components:[{type:3,custom_id:'dg_ticket_select',placeholder:'Choose your option down below',min_values:1,max_values:1,options:ticketOptions.map(o=>({label:o.label,value:o.label,description:o.description,...(parseEmoji(o.emoji)?{emoji:parseEmoji(o.emoji)}:{})}))}]});
   if(!selector||buttons.length)components.push({type:1,components:actions});
-  const payload={embeds:[embed],components,allowed_mentions:{parse:[]}};
+  // Ticket panel uses a single Components V2 container; verification keeps legacy embeds.
+  let payload:Record<string,unknown>={embeds:[embed],components,allowed_mentions:{parse:[]}};
+  if(mode==='ticket'){
+   const children:Record<string,unknown>[]=[];
+   const banner=image instanceof File?'attachment://'+(image.type==='image/png'?'panel.png':image.type==='image/jpeg'?'panel.jpg':image.type==='image/webp'?'panel.webp':'panel.gif'):data.imageUrl;
+   if(banner)children.push({type:12,items:[{media:{url:banner}}]});
+   let text='**'+(data.title||'🎫 Lextrum Support').replace(/\\*/g,'')+'**\\n\\n'+message;
+   for(const section of sections)text+='\\n\\n**'+section.name.replace(/\\*/g,'')+'**\\n'+section.value;
+   if(text.length>3900)return NextResponse.json({error:'Ticket tekstas per ilgas (iki 3900 simbolių kartu su sekcijomis).'},{status:400});
+   if(data.thumbnailUrl){
+    children.push({type:9,components:[{type:10,content:text}],accessory:{type:11,media:{url:data.thumbnailUrl}}});
+   }else children.push({type:10,content:text});
+   children.push(...components as Record<string,unknown>[]);
+   if(data.footer)children.push({type:10,content:'-# '+data.footer.slice(0,1000).replace(/\\n/g,' ')});
+   if(children.length>10)return NextResponse.json({error:'Per daug ticket elementų viename panelyje.'},{status:400});
+   payload={flags:32768,components:[{type:17,accent_color:color,components:children}],allowed_mentions:{parse:[]}};
+  }
   const multipart=new FormData();multipart.set('payload_json',JSON.stringify(payload));
   if(image instanceof File){const ext=image.type==='image/png'?'png':image.type==='image/jpeg'?'jpg':image.type==='image/webp'?'webp':'gif';multipart.set('files[0]',image,'panel.'+ext);}
   const response=await fetch('https://discord.com/api/v10/channels/'+channelId+'/messages',{method:'POST',headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN},body:multipart,cache:'no-store'});
