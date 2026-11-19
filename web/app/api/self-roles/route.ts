@@ -51,21 +51,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({error:'Rolė '+option.label+' yra valdoma, per aukšta arba turi pavojingas teises. Perkelk boto rolę aukščiau ir pasirink paprastą rolę.'},{status:400});
   }
   const parseEmoji=(value:string)=>{const m=value.match(/^<(a?):([A-Za-z0-9_]+):(\d{17,20})>$/);return m?{id:m[3],name:m[2],animated:m[1]==='a'}:value?{name:value}:undefined;};
-  // Three ordered embeds keep the wide top banner, text and narrow footer together in one Discord message.
-  const embeds:Record<string,unknown>[]=[];
+  // Discord Components V2: one container groups banners, text and interactive roles.
   const accent=/^#[0-9a-fA-F]{6}$/.test(color)?parseInt(color.slice(1),16):0x8066f2;
-  if(topImage instanceof File||imageUrl){
-   embeds.push({color:accent,image:{url:topImage instanceof File?'attachment://selfroles-top.png':imageUrl}});
-  }
-  const embed:Record<string,unknown>={title,description,color:accent};
-  if(footer)embed.footer={text:footer};
-  embeds.push(embed);
-  if(bottomImage instanceof File)embeds.push({color:accent,image:{url:'attachment://selfroles-bottom.png'}});
-  const components:unknown[]=presentation==='dropdown'
+  const parseEmoji=(value:string)=>{const m=value.match(/^<(a?):([A-Za-z0-9_]+):(\\d{17,20})>$/);return m?{id:m[3],name:m[2],animated:m[1]==='a'}:value?{name:value}:undefined;};
+  const children:Record<string,unknown>[]=[];
+  const topUrl=topImage instanceof File?'attachment://selfroles-top.png':imageUrl;
+  if(topUrl)children.push({type:12,items:[{media:{url:topUrl}}]});
+  const displayText=('**'+title.replace(/\\*/g,'')+'**\\n\\n'+description);
+  if(displayText.length>4000)return NextResponse.json({error:'Pavadinimas ir aprašymas kartu turi tilpti į 4000 simbolių.'},{status:400});
+  children.push({type:10,content:displayText});
+  const rows:Record<string,unknown>[]=presentation==='dropdown'
    ?[{type:1,components:[{type:3,custom_id:'lx_selfroles',placeholder:'🎭 Pasirink / nuimk roles',min_values:1,max_values:Math.min(25,options.length),options:options.map(o=>({label:o.label,value:o.roleId,...(parseEmoji(o.emoji)?{emoji:parseEmoji(o.emoji)}:{})}))}]}]
    :Array.from({length:Math.ceil(options.length/5)},(_,row)=>({type:1,components:options.slice(row*5,row*5+5).map(o=>({type:2,style:2,label:o.label.slice(0,80),custom_id:'lx_selfrole:'+o.roleId,...(parseEmoji(o.emoji)?{emoji:parseEmoji(o.emoji)}:{})}))}));
+  children.push(...rows);
+  if(bottomImage instanceof File)children.push({type:12,items:[{media:{url:'attachment://selfroles-bottom.png'}}]});
+  if(footer)children.push({type:10,content:'-# '+footer.replace(/\\n/g,' ').slice(0,500)});
+  // The container holds up to 10 direct children. Five button rows + two images + two text blocks fits.
+  const components=[{type:17,accent_color:accent,components:children}];
   const message=new FormData();
-  message.set('payload_json',JSON.stringify({embeds,components,allowed_mentions:{parse:[]}}));
+  message.set('payload_json',JSON.stringify({flags:32768,components,allowed_mentions:{parse:[]}}));
   if(topImage instanceof File)message.set('files[0]',topImage,'selfroles-top.png');
   if(bottomImage instanceof File)message.set('files[1]',bottomImage,'selfroles-bottom.png');
   const result=await fetch('https://discord.com/api/v10/channels/'+channelId+'/messages',{method:'POST',headers:{Authorization:'Bot '+token},body:message,cache:'no-store'});
