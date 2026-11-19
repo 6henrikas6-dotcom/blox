@@ -55,7 +55,7 @@ export async function POST(request:NextRequest){
   const chunks:string[]=[];
   for(let i=0;i<sections.length;i++){
    const paragraph='§'+(Math.floor(i/10)+1)+'.'+(i%10);
-   const part='**'+(i+1)+'. '+paragraph+' '+sections[i].title+'**\n'+sections[i].body;
+   const part='**'+paragraph+' '+sections[i].title+'**\n'+sections[i].body;
    if(part.length>3900)return NextResponse.json({error:'Vienas skyrius per ilgas.'},{status:400});
    if(sectionText&&(sectionText.length+part.length+2>3900)){
     chunks.push(sectionText);sectionText=part;
