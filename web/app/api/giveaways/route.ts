@@ -20,12 +20,18 @@ export async function POST(req:NextRequest){
   const channels=await discord('/guilds/'+guildId+'/channels') as {id:string;type:number}[];
   if(!channels.some(c=>c.id===channelId&&(c.type===0||c.type===5)))return NextResponse.json({error:'Neteisingas kanalas'},{status:400});
   const id=randomUUID(),endsAt=new Date(Date.now()+durationHours*3600000);
-  const embed:Record<string,unknown>={title:title||'🎉 GIVEAWAY',description:(description?description+'\n\n':'')+'**'+prize.trim()+'**\n\nLaimėtojų: '+winnerCount+'\nBaigsis: <t:'+Math.floor(endsAt.getTime()/1000)+':R>',color:/^#[0-9a-fA-F]{6}$/.test(color)?parseInt(color.slice(1),16):10189055};
-  if(footer)embed.footer={text:footer};
-  if(thumbnailUrl)embed.thumbnail={url:thumbnailUrl};
-  if(image instanceof File){const ext=image.type==='image/png'?'png':image.type==='image/jpeg'?'jpg':image.type==='image/webp'?'webp':'gif';embed.image={url:'attachment://giveaway.'+ext};}
-  else if(imageUrl)embed.image={url:imageUrl};
-  const payload={embeds:[embed],components:[{type:1,components:[{type:2,style:1,label:'🎉 Dalyvauti • 0',custom_id:'dg_giveaway:'+id}]}],allowed_mentions:{parse:[]}};
+  const accent=/^#[0-9a-fA-F]{6}$/.test(color)?parseInt(color.slice(1),16):10189055;
+  const children:Record<string,unknown>[]=[];
+  const content='**'+(title||'🎉 GIVEAWAY').replace(/\*/g,'')+'**\n\n'+(description?description+'\n\n':'')+'**'+prize.trim().replace(/\*/g,'')+'**\n\nLaimėtojų: '+winnerCount+'\nBaigsis: <t:'+Math.floor(endsAt.getTime()/1000)+':R>';
+  if(content.length>4000)return NextResponse.json({error:'Giveaway tekstas per ilgas.'},{status:400});
+  if(thumbnailUrl)children.push({type:9,components:[{type:10,content}],accessory:{type:11,media:{url:thumbnailUrl}}});
+  else children.push({type:10,content});
+  const ext=image instanceof File?(image.type==='image/png'?'png':image.type==='image/jpeg'?'jpg':image.type==='image/webp'?'webp':'gif'):'';
+  const banner=image instanceof File?'attachment://giveaway.'+ext:imageUrl;
+  if(banner)children.push({type:12,items:[{media:{url:banner}}]});
+  children.push({type:1,components:[{type:2,style:1,label:'🎉 Dalyvauti • 0',custom_id:'dg_giveaway:'+id}]});
+  if(footer)children.push({type:10,content:'-# '+footer.slice(0,1000).replace(/\n/g,' ')});
+  const payload={flags:32768,components:[{type:17,accent_color:accent,components:children}],allowed_mentions:{parse:[]}};
   const multipart=new FormData();multipart.set('payload_json',JSON.stringify(payload));
   if(image instanceof File){const ext=image.type==='image/png'?'png':image.type==='image/jpeg'?'jpg':image.type==='image/webp'?'webp':'gif';multipart.set('files[0]',image,'giveaway.'+ext);}
   const response=await fetch('https://discord.com/api/v10/channels/'+channelId+'/messages',{method:'POST',headers:{Authorization:'Bot '+process.env.DISCORD_BOT_TOKEN},body:multipart,cache:'no-store'});
