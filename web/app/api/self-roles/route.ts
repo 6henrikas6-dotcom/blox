@@ -32,12 +32,13 @@ export async function POST(req: NextRequest) {
  }
  if(new Set(options.map(x=>x.roleId)).size!==options.length)return NextResponse.json({error:'Vaidmenys negali kartotis.'},{status:400});
  try{
-  const [channels,roles,guild]=await Promise.all([
+  const [channels,roles,botUser]=await Promise.all([
    discord('/guilds/'+guildId+'/channels') as Promise<Array<{id:string;type:number}>>,
    discord('/guilds/'+guildId+'/roles') as Promise<Array<{id:string;position:number;permissions:string;managed:boolean}>>,
-   discord('/guilds/'+guildId+'/members/@me') as Promise<{roles:string[]}>,
+   discord('/users/@me') as Promise<{id:string}>,
   ]);
   if(!channels.some(c=>c.id===channelId&&(c.type===0||c.type===5)))return NextResponse.json({error:'Kanalas nepriklauso Lextrum serveriui.'},{status:400});
+  const guild=await discord('/guilds/'+guildId+'/members/'+botUser.id) as {roles:string[]};
   const dangerous=BigInt(8)|BigInt(32)|BigInt(268435456)|BigInt(2)|BigInt(4)|BigInt(16)|BigInt(536870912);
   const highest=Math.max(0,...roles.filter(r=>guild.roles.includes(r.id)).map(r=>r.position));
   for(const option of options){
