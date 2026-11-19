@@ -3,7 +3,7 @@ import { requireAdmin, validOrigin } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { discord } from '@/lib/discord';
 
-type Section={title:string;body:string};
+type Section={body:string};
 
 export async function POST(request:NextRequest){
  const admin=await requireAdmin();
@@ -29,12 +29,12 @@ export async function POST(request:NextRequest){
   sections=parsed.map(value=>{
    if(!value||typeof value!=='object')throw Error();
    const section=value as Record<string,unknown>;
-   if(typeof section.title!=='string'||typeof section.body!=='string')throw Error();
-   const name=section.title.trim(),body=section.body.trim();
-   if(!name||!body||name.length>100||body.length>1200)throw Error();
-   return {title:name,body};
+   if(typeof section.body!=='string')throw Error();
+   const body=section.body.trim();
+   if(!body||body.length>1200)throw Error();
+   return {body};
   });
- }catch{return NextResponse.json({error:'Sukurk 1–15 taisyklių skyrių. Kiekviename reikia pavadinimo ir teksto.'},{status:400});}
+ }catch{return NextResponse.json({error:'Sukurk 1–15 taisyklių skyrių. Kiekviename reikia taisyklės teksto.'},{status:400});}
  try{
   const channels=await discord('/guilds/'+guildId+'/channels') as Array<{id:string;type:number}>;
   if(!channels.some(c=>c.id===channelId&&(c.type===0||c.type===5)))
@@ -55,7 +55,7 @@ export async function POST(request:NextRequest){
   const chunks:string[]=[];
   for(let i=0;i<sections.length;i++){
    const paragraph='§'+(Math.floor(i/10)+1)+'.'+(i%10);
-   const part='**'+paragraph+' '+sections[i].title+'**\n'+sections[i].body;
+   const part='**'+paragraph+'**\n'+sections[i].body;
    if(part.length>3900)return NextResponse.json({error:'Vienas skyrius per ilgas.'},{status:400});
    if(sectionText&&(sectionText.length+part.length+2>3900)){
     chunks.push(sectionText);sectionText=part;
