@@ -7,6 +7,7 @@ import { REST, Routes } from 'discord.js';
 import { commands } from './commands.js';
 import { reviewCard } from './review-card.js';
 import { welcomeCard } from './welcome-card.js';
+import { levelUpCard } from './level-card.js';
 
 const {DISCORD_TOKEN,DATABASE_URL}=process.env;
 if(!DISCORD_TOKEN || !DATABASE_URL) throw new Error('Missing DISCORD_TOKEN or DATABASE_URL');
@@ -202,7 +203,20 @@ client.on(Events.MessageCreate,async message=>{
     const old=await db.xp.findUnique({where:{guildId_userId:{guildId:message.guildId,userId:message.author.id}}});
     const next=await db.xp.upsert({where:{guildId_userId:{guildId:message.guildId,userId:message.author.id}},create:{guildId:message.guildId,userId:message.author.id,points},update:{points:{increment:points},lastEarnedAt:new Date()}});
     const level=xpLevel(next.points);
-    if(auto?.levelUpEnabled!==false&&level>xpLevel(old?.points??0)&&level>0){await sendTo(message.guildId,auto?.levelChannelId??message.channelId,renderMessage(auto?.levelMessage??'🎉 {user} pasiekė {level} lygį!',{user:message.author.username,username:message.author.username,level:String(level),count:'0',inviter:'unknown',invites:'0'}));await audit(message.guildId,'LEVEL_UP',message.author.id,String(level));}
+    if(auto?.levelUpEnabled!==false&&level>xpLevel(old?.points??0)&&level>0){
+      const channel=await message.guild.channels.fetch(auto?.levelChannelId??message.channelId).catch(()=>null);
+      if(channel?.isTextBased()&&'send' in channel){
+        try{
+          const member=message.member??await message.guild.members.fetch(message.author.id).catch(()=>null);
+          const card=await levelUpCard(member?.displayName??message.author.displayName,level,message.author.displayAvatarURL({extension:'png',size:256}));
+          await channel.send({files:[new AttachmentBuilder(card,{name:'lextrum-level-up.png'})]});
+        }catch(error){
+          log.warn({error,guildId:message.guildId,userId:message.author.id},'Level-up card failed; sending text fallback');
+          await channel.send({content:'🎉 <@'+message.author.id+'> pasiekė **'+level+'** lygį!',allowedMentions:{users:[message.author.id]}}).catch(e=>log.error(e,'Level-up fallback failed'));
+        }
+      }else log.warn({guildId:message.guildId,channelId:auto?.levelChannelId},'Level-up channel unavailable');
+      await audit(message.guildId,'LEVEL_UP',message.author.id,String(level));
+    }
   }catch(e){log.error(e,'Message handler');}
 });
 client.on(Events.InteractionCreate,async interaction=>{
