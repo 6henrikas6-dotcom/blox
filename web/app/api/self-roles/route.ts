@@ -53,11 +53,11 @@ export async function POST(req: NextRequest) {
   const parseEmoji=(value:string)=>{const m=value.match(/^<(a?):([A-Za-z0-9_]+):(\d{17,20})>$/);return m?{id:m[3],name:m[2],animated:m[1]==='a'}:value?{name:value}:undefined;};
   // Discord Components V2: one container groups banners, text and interactive roles.
   const accent=/^#[0-9a-fA-F]{6}$/.test(color)?parseInt(color.slice(1),16):0x8066f2;
-  const parseEmoji=(value:string)=>{const m=value.match(/^<(a?):([A-Za-z0-9_]+):(\\d{17,20})>$/);return m?{id:m[3],name:m[2],animated:m[1]==='a'}:value?{name:value}:undefined;};
+  const parseEmoji=(value:string)=>{const m=value.match(/^<(a?):([A-Za-z0-9_]+):(\d{17,20})>$/);return m?{id:m[3],name:m[2],animated:m[1]==='a'}:value?{name:value}:undefined;};
   const children:Record<string,unknown>[]=[];
   const topUrl=topImage instanceof File?'attachment://selfroles-top.png':imageUrl;
   if(topUrl)children.push({type:12,items:[{media:{url:topUrl}}]});
-  const displayText=('**'+title.replace(/\\*/g,'')+'**\\n\\n'+description);
+  const displayText=('**'+title.replace(/\*/g,'')+'**\n\n'+description);
   if(displayText.length>4000)return NextResponse.json({error:'Pavadinimas ir aprašymas kartu turi tilpti į 4000 simbolių.'},{status:400});
   children.push({type:10,content:displayText});
   const rows:Record<string,unknown>[]=presentation==='dropdown'
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
    :Array.from({length:Math.ceil(options.length/5)},(_,row)=>({type:1,components:options.slice(row*5,row*5+5).map(o=>({type:2,style:2,label:o.label.slice(0,80),custom_id:'lx_selfrole:'+o.roleId,...(parseEmoji(o.emoji)?{emoji:parseEmoji(o.emoji)}:{})}))}));
   children.push(...rows);
   if(bottomImage instanceof File)children.push({type:12,items:[{media:{url:'attachment://selfroles-bottom.png'}}]});
-  if(footer)children.push({type:10,content:'-# '+footer.replace(/\\n/g,' ').slice(0,500)});
+  if(footer)children.push({type:10,content:'-# '+footer.replace(/\n/g,' ').slice(0,500)});
   // The container holds up to 10 direct children. Five button rows + two images + two text blocks fits.
   const components=[{type:17,accent_color:accent,components:children}];
   const message=new FormData();
