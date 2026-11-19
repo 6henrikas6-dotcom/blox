@@ -24,3 +24,9 @@
 .ticket-sections{border-top:1px solid #30354a;padding-top:18px;margin-top:18px}.ticket-section-editor{border:1px solid #34394d;border-radius:10px;padding:14px;margin:14px 0}.ticket-section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.embed-field{margin-top:14px;clear:both}.embed-field strong{font-size:14px;color:#fff}.embed-field p{white-space:pre-wrap;margin-top:5px}
 
 .ticket-option-toggle{display:flex!important;align-items:center;gap:10px}.ticket-option-toggle input{width:auto!important}.ticket-select-preview{margin:12px 0 0 48px;max-width:460px;background:#393b43;border:1px solid #4b4d58;border-radius:9px;overflow:hidden}.ticket-select-placeholder{padding:12px 15px;color:#d8d9df;display:flex;justify-content:space-between}.ticket-select-option{display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid #484a55;color:#f3f3f5}.ticket-select-option:nth-child(odd){background:#42444d}.ticket-select-option small{display:block;color:#b7b9c3;margin-top:3px}.ticket-option-emoji{font-size:24px;width:32px;text-align:center}@media(max-width:1000px){.ticket-select-preview{margin-left:0}}
+
+/* Lextrum self-role button preview */
+.self-role-button-preview{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0 48px}
+.self-role-preview-button{display:inline-block;max-width:100%;padding:9px 13px;border-radius:5px;background:#4e5058;color:#f2f3f5;font-size:13px;font-weight:650;overflow-wrap:anywhere}
+.role-option{padding:12px 0;border-top:1px solid #30354a}
+@media(max-width:1000px){.self-role-button-preview{margin-left:0}}
