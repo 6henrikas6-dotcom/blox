@@ -745,7 +745,7 @@ client.on(Events.InteractionCreate,async interaction=>{
    await interaction.reply({content:'Self-Roles konfigūracija sugadinta.',flags:MessageFlags.Ephemeral});return;
   }
   const allowed=(cfg as {roleIds:unknown[]}).roleIds;
-  const permitted=new Set(allowed.filter((v):v is string=>typeof v==='string'&&/^\\d{17,20}$/.test(v)));
+  const permitted=new Set(allowed.filter((v):v is string=>typeof v==='string'&&/^\d{17,20}$/.test(v)));
   if(!interaction.values.length||interaction.values.some(id=>!permitted.has(id))){
    await interaction.reply({content:'Neleidžiamas rolės pasirinkimas.',flags:MessageFlags.Ephemeral});return;
   }
