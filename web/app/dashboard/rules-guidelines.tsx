@@ -80,9 +80,9 @@ export function RulesGuidelines({channels}:{channels:Channel[]}){
     }}/></label>
    {image&&<button type="button" className="secondary" onClick={()=>setImage(null)}>✕ Pašalinti banerį</button>}
    <div className="ticket-sections"><h3>📋 Taisyklės ir gairės</h3>
-    <p>Gali pridėti iki 15 skyrių. Nariai matys numeruotus punktus vienoje V2 panelėje.</p>
+    <p>Gali pridėti iki 15 skyrių. Punktai numeruojami §1.0, §1.1 ... §1.9, §2.0 vienoje V2 panelėje.</p>
     {sections.map((section,index)=><div className="ticket-section-editor" key={index}>
-     <div className="ticket-section-header"><strong>{index+1}. skyrius</strong><button type="button" className="secondary" disabled={sections.length<=1} onClick={()=>setSections(before=>before.filter((_,i)=>i!==index))}>✕ Pašalinti</button></div>
+     <div className="ticket-section-header"><strong>{index+1}. §{Math.floor(index/10)+1}.{index%10} skyrius</strong><button type="button" className="secondary" disabled={sections.length<=1} onClick={()=>setSections(before=>before.filter((_,i)=>i!==index))}>✕ Pašalinti</button></div>
      <label>Pavadinimas<input maxLength={100} value={section.title} onChange={e=>update(index,'title',e.target.value)}/></label>
      <label>Tekstas<textarea rows={4} maxLength={1200} value={section.body} onChange={e=>update(index,'body',e.target.value)}/></label>
     </div>)}
@@ -102,7 +102,7 @@ export function RulesGuidelines({channels}:{channels:Channel[]}){
      {intro&&<p style={{whiteSpace:'pre-wrap'}}>{intro}</p>}
      {preview&&<img className="self-role-top-image" src={preview} alt="Rules banner"/>}
      {sections.map((section,index)=><div key={index} className="embed-field">
-      <strong>{index+1}. {section.title||'Skyriaus pavadinimas'}</strong><p style={{whiteSpace:'pre-wrap'}}>{section.body||'Skyriaus tekstas...'}</p>
+      <strong>{index+1}. §{Math.floor(index/10)+1}.{index%10} {section.title||'Skyriaus pavadinimas'}</strong><p style={{whiteSpace:'pre-wrap'}}>{section.body||'Skyriaus tekstas...'}</p>
      </div>)}
      {footer&&<small className="embed-footer">{footer}</small>}
     </div>
