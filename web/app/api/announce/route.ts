@@ -12,6 +12,9 @@ export async function POST(req:NextRequest){
  if(!guildId||!token)return NextResponse.json({error:'Botas nesukonfigūruotas'},{status:500});
  let form:FormData;try{form=await req.formData();}catch{return NextResponse.json({error:'Neteisingi formos duomenys'},{status:400});}
  const title=string(form.get('title')).trim(),description=string(form.get('description')).trim(),content=string(form.get('content')).trim(),footer=string(form.get('footer')).trim(),author=string(form.get('author')).trim(),imageUrl=string(form.get('imageUrl')).trim(),thumbnailUrl=string(form.get('thumbnailUrl')).trim(),color=string(form.get('color')).trim();
+ const senderName=string(form.get('username')).trim();
+ const senderAvatar=string(form.get('avatarUrl')).trim();
+ if(senderName.length>80)return NextResponse.json({error:'Siuntėjo vardas per ilgas (iki 80 simbolių).'},{status:400});
  const pingEveryone=string(form.get('everyone'))==='true';
  const roleId=string(form.get('roleId'));
  const requestedChannelId=string(form.get('channelId'));
@@ -31,7 +34,7 @@ export async function POST(req:NextRequest){
  const file=form.get('image');
  if(title.length>256||description.length>4000||content.length>2000||footer.length>2048||author.length>256||(!title&&!description&&!content))return NextResponse.json({error:'Patikrink tekstą ir laukų ilgį'},{status:400});
  const validUrl=(s:string)=>{if(!s)return true;try{const u=new URL(s);return u.protocol==='https:'&&s.length<=1800&&!u.username&&!u.password;}catch{return false;}};
- if(!validUrl(imageUrl)||!validUrl(thumbnailUrl))return NextResponse.json({error:'Nuotraukų adresai turi būti HTTPS'},{status:400});
+ if(!validUrl(imageUrl)||!validUrl(thumbnailUrl)||!validUrl(senderAvatar))return NextResponse.json({error:'Nuotraukų ir avataro adresai turi būti HTTPS'},{status:400});
  if(file!==null&&(!(file instanceof File)||!allowed.has(file.type)||file.size>8*1024*1024||file.size===0))return NextResponse.json({error:'Įkelk PNG, JPG, WEBP arba GIF iki 8 MB'},{status:400});
  const cfg=await db.guildConfig.findUnique({where:{guildId}});
  const channelId=requestedChannelId||cfg?.announcementChannelId;
@@ -70,6 +73,27 @@ export async function POST(req:NextRequest){
  const data=new FormData();data.set('payload_json',JSON.stringify(payload));
  if(file instanceof File){const name=file.type==='image/png'?'image.png':file.type==='image/jpeg'?'image.jpg':file.type==='image/webp'?'image.webp':'image.gif';data.set('files[0]',file,name);}
  try{
+  // Discord only permits custom sender usernames/avatars through webhooks.
+  // Reuse the bot-created channel webhook instead of creating one per message.
+  if(senderName||senderAvatar){
+   const list=await fetch(discordApi+'/channels/'+channelId+'/webhooks',{headers:{Authorization:'Bot '+token},cache:'no-store'});
+   if(!list.ok)return NextResponse.json({error:'Pasirinktame kanale botui reikia Manage Webhooks teisės, kad keistų vardą ir avatarą.'},{status:403});
+   const existing=await list.json() as Array<{id:string;token?:string;name:string;type:number}>;
+   let hook=existing.find(h=>h.name==='Lextrum Embed Sender'&&h.type===1&&h.token);
+   if(!hook){
+    const create=await fetch(discordApi+'/channels/'+channelId+'/webhooks',{method:'POST',headers:{Authorization:'Bot '+token,'Content-Type':'application/json'},body:JSON.stringify({name:'Lextrum Embed Sender'}),cache:'no-store'});
+    if(!create.ok)return NextResponse.json({error:'Nepavyko sukurti Discord webhook. Patikrink Manage Webhooks leidimą.'},{status:403});
+    hook=await create.json() as {id:string;token:string;name:string;type:number};
+   }
+   if(!hook.token)return NextResponse.json({error:'Discord negrąžino webhook tokeno.'},{status:502});
+   const custom={...payload,username:senderName||'Lextrum Development',...(senderAvatar?{avatar_url:senderAvatar}:{})};
+   data.set('payload_json',JSON.stringify(custom));
+   const sentResponse=await fetch(discordApi+'/webhooks/'+hook.id+'/'+hook.token+'?wait=true',{method:'POST',body:data,cache:'no-store'});
+   if(!sentResponse.ok)return NextResponse.json({error:'Discord atmetė webhook pranešimą ('+sentResponse.status+'). Patikrink įvestą nuotrauką.'},{status:502});
+   const sent=await sentResponse.json() as {id?:string};
+   await db.auditEvent.create({data:{guildId,actorId:user.id,event:'DASHBOARD_EMBED_SENDER',detail:JSON.stringify({channelId,messageId:sent.id??'',senderName:senderName||'Lextrum Development'})}}).catch(()=>{});
+   return NextResponse.json({ok:true,messageId:sent.id});
+  }
   const res=await fetch(discordApi+'/channels/'+channelId+'/messages',{method:'POST',headers:{Authorization:'Bot '+token},body:data,cache:'no-store'});
   if(!res.ok)return NextResponse.json({error:'Discord atmetė pranešimą ('+res.status+'). Patikrink boto leidimus, failo dydį ir URL.'},{status:502});
   const sent=await res.json() as {id?:string;components?:Array<{components?:Array<{type:number;url?:string}>}>};
