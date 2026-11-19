@@ -49,21 +49,36 @@ export async function POST(req:NextRequest){
   const components:unknown[]=[];
   if(selector)components.push({type:1,components:[{type:3,custom_id:'dg_ticket_select',placeholder:'Choose your option down below',min_values:1,max_values:1,options:ticketOptions.map(o=>({label:o.label,value:o.label,description:o.description,...(parseEmoji(o.emoji)?{emoji:parseEmoji(o.emoji)}:{})}))}]});
   if(!selector||buttons.length)components.push({type:1,components:actions});
-  // Ticket panel uses a single Components V2 container; verification keeps legacy embeds.
+  // Ticket and Verification panels use Components V2 containers.
   let payload:Record<string,unknown>={embeds:[embed],components,allowed_mentions:{parse:[]}};
   if(mode==='ticket'){
    const children:Record<string,unknown>[]=[];
    const banner=image instanceof File?'attachment://'+(image.type==='image/png'?'panel.png':image.type==='image/jpeg'?'panel.jpg':image.type==='image/webp'?'panel.webp':'panel.gif'):data.imageUrl;
    if(banner)children.push({type:12,items:[{media:{url:banner}}]});
-   let text='**'+(data.title||'🎫 Lextrum Support').replace(/\\*/g,'')+'**\\n\\n'+message;
-   for(const section of sections)text+='\\n\\n**'+section.name.replace(/\\*/g,'')+'**\\n'+section.value;
+   let text='**'+(data.title||'🎫 Lextrum Support').replace(/\*/g,'')+'**\n\n'+message;
+   for(const section of sections)text+='\n\n**'+section.name.replace(/\*/g,'')+'**\n'+section.value;
    if(text.length>3900)return NextResponse.json({error:'Ticket tekstas per ilgas (iki 3900 simbolių kartu su sekcijomis).'},{status:400});
    if(data.thumbnailUrl){
     children.push({type:9,components:[{type:10,content:text}],accessory:{type:11,media:{url:data.thumbnailUrl}}});
    }else children.push({type:10,content:text});
    children.push(...components as Record<string,unknown>[]);
-   if(data.footer)children.push({type:10,content:'-# '+data.footer.slice(0,1000).replace(/\\n/g,' ')});
+   if(data.footer)children.push({type:10,content:'-# '+data.footer.slice(0,1000).replace(/\n/g,' ')});
    if(children.length>10)return NextResponse.json({error:'Per daug ticket elementų viename panelyje.'},{status:400});
+   payload={flags:32768,components:[{type:17,accent_color:color,components:children}],allowed_mentions:{parse:[]}};
+  }
+  if(mode==='verify'){
+   const children:Record<string,unknown>[]=[];
+   const banner=image instanceof File?'attachment://'+(image.type==='image/png'?'panel.png':image.type==='image/jpeg'?'panel.jpg':image.type==='image/webp'?'panel.webp':'panel.gif'):data.imageUrl;
+   const title=(data.title||'Lextrum Verification').replace(/\*/g,'');
+   const text='**'+title+'**\n\n'+message;
+   if(text.length>3900)return NextResponse.json({error:'Verification tekstas per ilgas (maks. 3900 simbolių).'},{status:400});
+   // Preserve the original layout: introduction, wide verification banner, then action buttons.
+   if(data.thumbnailUrl)children.push({type:9,components:[{type:10,content:text}],accessory:{type:11,media:{url:data.thumbnailUrl}}});
+   else children.push({type:10,content:text});
+   if(banner)children.push({type:12,items:[{media:{url:banner}}]});
+   children.push(...components as Record<string,unknown>[]);
+   if(data.footer)children.push({type:10,content:'-# '+data.footer.slice(0,1000).replace(/\n/g,' ')});
+   if(children.length>10)return NextResponse.json({error:'Per daug Verification panelio elementų.'},{status:400});
    payload={flags:32768,components:[{type:17,accent_color:color,components:children}],allowed_mentions:{parse:[]}};
   }
   const multipart=new FormData();multipart.set('payload_json',JSON.stringify(payload));
