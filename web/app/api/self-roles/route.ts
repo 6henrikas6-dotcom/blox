@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
  const data=input as Record<string,unknown>;
  const str=(key:string)=>typeof data[key]==='string'?(data[key] as string).trim():'';
  const channelId=str('channelId'),title=str('title'),description=str('description'),footer=str('footer'),color=str('color'),imageUrl=str('imageUrl');
+ const presentation=str('presentation')==='dropdown'?'dropdown':'buttons';
  const validSnow=(s:string)=>/^\d{17,20}$/.test(s);
  if(!validSnow(channelId)||!title||title.length>256||!description||description.length>4000||footer.length>2048||title.length+description.length+footer.length>5800)
   return NextResponse.json({error:'Pasirink kanalą ir užpildyk embed tekstą (iki Discord limitų).'},{status:400});
@@ -50,7 +51,9 @@ export async function POST(req: NextRequest) {
   const embed:Record<string,unknown>={title,description,color:/^#[0-9a-fA-F]{6}$/.test(color)?parseInt(color.slice(1),16):0x8066f2};
   if(footer)embed.footer={text:footer};
   if(imageUrl)embed.image={url:imageUrl};
-  const components=[{type:1,components:[{type:3,custom_id:'lx_selfroles',placeholder:'🎭 Pasirink / nuimk roles',min_values:1,max_values:Math.min(25,options.length),options:options.map(o=>({label:o.label,value:o.roleId,...(parseEmoji(o.emoji)?{emoji:parseEmoji(o.emoji)}:{})}))}]}];
+  const components:unknown[]=presentation==='dropdown'
+   ?[{type:1,components:[{type:3,custom_id:'lx_selfroles',placeholder:'🎭 Pasirink / nuimk roles',min_values:1,max_values:Math.min(25,options.length),options:options.map(o=>({label:o.label,value:o.roleId,...(parseEmoji(o.emoji)?{emoji:parseEmoji(o.emoji)}:{})}))}]}]
+   :Array.from({length:Math.ceil(options.length/5)},(_,row)=>({type:1,components:options.slice(row*5,row*5+5).map(o=>({type:2,style:2,label:o.label.slice(0,80),custom_id:'lx_selfrole:'+o.roleId,...(parseEmoji(o.emoji)?{emoji:parseEmoji(o.emoji)}:{})}))}));
   const result=await fetch('https://discord.com/api/v10/channels/'+channelId+'/messages',{method:'POST',headers:{Authorization:'Bot '+token,'Content-Type':'application/json'},body:JSON.stringify({embeds:[embed],components,allowed_mentions:{parse:[]}}),cache:'no-store'});
   if(!result.ok)return NextResponse.json({error:'Discord atmetė Self-Roles panelį ('+result.status+'). Patikrink boto leidimus.'},{status:502});
   const sent=await result.json() as {id:string};
