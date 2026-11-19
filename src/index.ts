@@ -732,6 +732,50 @@ async function checkTicketSla(){
 client.once(Events.ClientReady,()=>{setInterval(()=>checkTicketSla().catch(e=>log.error(e,'Ticket SLA scheduler')),5*60_000);checkTicketSla().catch(e=>log.error(e,'Ticket SLA initial check'));});
 client.once(Events.ClientReady,()=>{setInterval(()=>finishGiveaways().catch(e=>log.error(e,'Giveaway scheduler')),30_000);finishGiveaways().catch(e=>log.error(e));});
 
+// Lextrum dashboard self-role dropdown. The allowed roles are recorded per message in AuditEvent.
+client.on(Events.InteractionCreate,async interaction=>{
+ if(!interaction.isStringSelectMenu()||!interaction.inGuild()||interaction.customId!=='lx_selfroles')return;
+ try{
+  const guild=interaction.guild!;
+  const record=await db.auditEvent.findFirst({where:{guildId:guild.id,event:'SELF_ROLE_PANEL:'+interaction.message.id},select:{detail:true}});
+  if(!record?.detail){await interaction.reply({content:'Šis Self-Roles panelis nebeaktyvus. Paprašyk administratoriaus sukurti naują.',flags:MessageFlags.Ephemeral});return;}
+  let cfg:unknown;
+  try{cfg=JSON.parse(record.detail);}catch{}
+  if(!cfg||typeof cfg!=='object'||!Array.isArray((cfg as {roleIds?:unknown}).roleIds)){
+   await interaction.reply({content:'Self-Roles konfigūracija sugadinta.',flags:MessageFlags.Ephemeral});return;
+  }
+  const allowed=(cfg as {roleIds:unknown[]}).roleIds;
+  const permitted=new Set(allowed.filter((v):v is string=>typeof v==='string'&&/^\\d{17,20}$/.test(v)));
+  if(!interaction.values.length||interaction.values.some(id=>!permitted.has(id))){
+   await interaction.reply({content:'Neleidžiamas rolės pasirinkimas.',flags:MessageFlags.Ephemeral});return;
+  }
+  await interaction.deferReply({flags:MessageFlags.Ephemeral});
+  const member=await guild.members.fetch(interaction.user.id);
+  const me=await guild.members.fetchMe();
+  if(!me.permissions.has(PermissionFlagsBits.ManageRoles)){
+   await interaction.editReply('Botui reikia Manage Roles teisės.');return;
+  }
+  const updated:string[]=[],removed:string[]=[],failed:string[]=[];
+  const dangerous=PermissionFlagsBits.Administrator|PermissionFlagsBits.ManageGuild|PermissionFlagsBits.ManageRoles|PermissionFlagsBits.BanMembers|PermissionFlagsBits.KickMembers|PermissionFlagsBits.ManageChannels|PermissionFlagsBits.ManageWebhooks;
+  for(const id of new Set(interaction.values)){
+   const role=await guild.roles.fetch(id).catch(()=>null);
+   if(!role||role.managed||role.id===guild.id||role.position>=me.roles.highest.position||role.permissions.has(dangerous)){
+    failed.push(id);continue;
+   }
+   try{
+    if(member.roles.cache.has(id)){await member.roles.remove(id,'Lextrum self-role selection');removed.push(role.name);}
+    else{await member.roles.add(id,'Lextrum self-role selection');updated.push(role.name);}
+   }catch(error){failed.push(id);log.warn({error,guildId:guild.id,roleId:id},'Self-role update failed');}
+  }
+  const lines=[updated.length?'✅ Pridėta: '+updated.join(', '):'',removed.length?'➖ Pašalinta: '+removed.join(', '):'',failed.length?'⚠️ Kai kurių rolių pakeisti nepavyko. Patikrink rolės aukštį ir boto teises.':''].filter(Boolean);
+  await interaction.editReply(lines.join('\\n')||'Nieko nepakeista.');
+ }catch(error){
+  log.error(error,'Self-role selector failed');
+  if(interaction.deferred||interaction.replied)await interaction.editReply('Nepavyko pakeisti rolių. Bandyk dar kartą.').catch(()=>{});
+  else await interaction.reply({content:'Nepavyko pakeisti rolių. Bandyk dar kartą.',flags:MessageFlags.Ephemeral}).catch(()=>{});
+ }
+});
+
 const stop=async()=>{client.destroy();await db.$disconnect();process.exit(0);};
 process.once('SIGTERM',()=>{void stop();});
 process.once('SIGINT',()=>{void stop();});
