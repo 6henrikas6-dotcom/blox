@@ -150,6 +150,7 @@ model DigitalOrderItem {
  fileName String?
  fileMime String?
  fileData Bytes?
+ deliveryState String @default("pending")
  deliveredTo String?
  deliveredAt DateTime?
  createdAt DateTime @default(now())
