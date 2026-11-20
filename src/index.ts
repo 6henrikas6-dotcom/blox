@@ -905,6 +905,49 @@ client.on(Events.InteractionCreate,async interaction=>{
  }
 });
 
+// Orders: only the assigned Discord buyer can accept terms and receive a private file.
+client.on(Events.InteractionCreate,async interaction=>{
+ if(!interaction.isButton()||!interaction.inGuild()||(!interaction.customId.startsWith('lx_order_accept:')&&!interaction.customId.startsWith('lx_order_decline:')))return;
+ const itemId=interaction.customId.slice(interaction.customId.indexOf(':')+1);
+ if(!/^c[a-z0-9]{15,35}$/i.test(itemId)){await interaction.reply({content:'Neteisingas produkto identifikatorius.',flags:MessageFlags.Ephemeral});return;}
+ if(interaction.customId.startsWith('lx_order_decline:')){
+  await interaction.reply({content:'❌ Taisyklių nepriėmei. Failas nebuvo išsiųstas.',flags:MessageFlags.Ephemeral});return;
+ }
+ await interaction.deferReply({flags:MessageFlags.Ephemeral});
+ try{
+  const item=await db.digitalOrderItem.findUnique({where:{id:itemId},include:{order:true}});
+  if(!item||item.order.guildId!==interaction.guildId||item.order.buyerId!==interaction.user.id){
+   await interaction.editReply('Užsakymas nepriskirtas tavo Discord paskyrai.');return;
+  }
+  if(!item.fileData||!item.fileName){
+   await interaction.editReply('Failas dar neįkeltas. Kreipkis į administraciją.');return;
+  }
+  if(item.deliveredAt){
+   await interaction.editReply('Ši prekė jau buvo išsiųsta. Jei failą pametei, kreipkis į administraciją.');return;
+  }
+  const claim=await db.digitalOrderItem.updateMany({where:{id:item.id,deliveryState:'pending',deliveredAt:null},data:{deliveryState:'sending'}});
+  if(claim.count!==1){await interaction.editReply('Ši prekė jau siunčiama arba jau atsiimta.');return;}
+  try{
+   const dm=await interaction.user.createDM();
+   const attachment=new AttachmentBuilder(Buffer.from(item.fileData),{name:item.fileName});
+   const panel=new ContainerBuilder().setAccentColor(0x38bd9d)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📦 Lextrum Development · Užsakymas #'+item.order.orderNumber+'**'))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent('✅ **Prekė pristatyta!**\n\n**Produktas:** '+item.productName+'\n**Produkto numeris:** '+item.productNumber+'\n\n📎 Prisegtas tavo pirkinio failas.\n\n🔐 **Primename:** be pardavėjo sutikimo draudžiama platinti, nutekinti, viešai skelbti ar perparduoti failą.'));
+   await dm.send({flags:MessageFlags.IsComponentsV2,components:[panel],files:[attachment],allowedMentions:{parse:[]}});
+   await db.digitalOrderItem.update({where:{id:item.id},data:{deliveryState:'delivered',deliveredTo:interaction.user.id,deliveredAt:new Date()}});
+   await db.auditEvent.create({data:{guildId:item.order.guildId,event:'ORDER_DELIVERED',actorId:interaction.user.id,detail:JSON.stringify({orderNumber:item.order.orderNumber,productNumber:item.productNumber})}}).catch(()=>{});
+   await interaction.editReply('✅ Prekė išsiųsta į tavo Discord **DM**! Patikrink asmenines žinutes.');
+  }catch(error){
+   log.warn({error,orderNumber:item.order.orderNumber,productNumber:item.productNumber},'Order DM delivery failed');
+   await db.digitalOrderItem.updateMany({where:{id:item.id,deliveryState:'sending'},data:{deliveryState:'pending'}}).catch(e=>log.error(e,'Order release failed'));
+   await interaction.editReply('❌ Nepavyko išsiųsti DM. Įjunk asmenines žinutes iš serverio narių ir bandyk dar kartą.').catch(()=>{});
+  }
+ }catch(error){
+  log.error(error,'Order acceptance failed');
+  await interaction.editReply('Nepavyko pristatyti prekės. Kreipkis į administraciją.').catch(()=>{});
+ }
+});
+
 // Lextrum dashboard self-role buttons and dropdown. Allowed roles are recorded per message in AuditEvent.
 client.on(Events.InteractionCreate,async interaction=>{
  if(!interaction.inGuild())return;
