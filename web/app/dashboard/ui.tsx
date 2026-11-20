@@ -5,6 +5,7 @@ import { RulesGuidelines } from './rules-guidelines';
 import { AboutUs } from './about-us';
 import { Suggestions } from './suggestions';
 import { Orders } from './orders';
+import { ServerMessages } from './server-messages';
 type Automation={welcomeChannelId:string;goodbyeChannelId:string;inviteLogChannelId:string;levelChannelId:string;welcomeMessage:string;goodbyeMessage:string;levelMessage:string;xpEnabled:boolean;xpPerMessage:number;xpCooldownSeconds:number;levelUpEnabled:boolean;inviteTrackingEnabled:boolean};
 type Analytics={ticketTotal:number;ticketOpen:number;ticketClosed:number;averageRating:number|null;giveawayCount:number;activeGiveaways:number;memberInviteCount:number;staff:{id:string;claimed:number;closed:number;ratingTotal:number;ratingCount:number}[]};
 type Props={analytics:Analytics;feedbackChannelId:string;savedTicket:{channelId:string;categoryId:string;roleId:string;message:string;optionsJson:string};automation:Automation;user:{id:string;username:string};guildName:string;memberCount:number|null;config:{joinThreshold:number;lockdown:boolean;logChannelId:string;announcementChannelId:string};channels:{id:string;name:string}[];categories:{id:string;name:string}[];roles:{id:string;name:string}[];events:{id:string;event:string;detail:string|null;createdAt:string}[];emojis:{id:string;name:string;animated:boolean}[]};
@@ -15,11 +16,12 @@ type PanelButton={label:string;style:number;emoji:string;url:string};
 const defaultButton=(label:string,style:number,emoji:string):PanelButton=>({label,style,emoji,url:''});
 function emojiDisplay(value:string){const m=value.match(/^<a?:([^:]+):(\d+)>$/);return m?'🔹 '+m[1]:value;}
 function buttonCss(style:number){return {background:style===3?'#248046':style===4?'#da373c':style===2||style===5?'#4e5058':'#5865f2',color:'#fff',padding:'9px 15px',borderRadius:5,fontWeight:600,display:'inline-block',margin:'4px 5px 4px 0'};}
-type NavIconName='orders'|'suggestions'|'about-us'|'rules-guidelines'|'embed-sender'|'self-roles'|'overview'|'security'|'announcements'|'partnerships'|'verification'|'tickets'|'giveaways'|'community'|'leveling'|'logs'|'staff'|'analytics';
+type NavIconName='server-messages'|'orders'|'suggestions'|'about-us'|'rules-guidelines'|'embed-sender'|'self-roles'|'overview'|'security'|'announcements'|'partnerships'|'verification'|'tickets'|'giveaways'|'community'|'leveling'|'logs'|'staff'|'analytics';
 function NavIcon({name}:{name:NavIconName}){
  const common={fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round' as const,strokeLinejoin:'round' as const};
  const paths:Record<NavIconName,React.ReactNode>={
   'embed-sender':<><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10M7 13h10M7 17h6"/></>,
+  'server-messages':<><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l1.6-3.2A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 10h9m-9 4h6"/></>,
   'self-roles':<><circle cx="8" cy="8" r="3"/><path d="M2 20v-2a6 6 0 0 1 12 0v2M16 7h6M19 4v6"/></>,
   'rules-guidelines':<><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/><path d="m8 4 2 2"/></>,
   'about-us':<><circle cx="12" cy="12" r="10"/><path d="M12 11v6m0-10v.1"/></>,
@@ -152,13 +154,14 @@ export default function DashboardClient({analytics,feedbackChannelId,savedTicket
   }catch{setStatus('Nepavyko susisiekti su serveriu');}finally{setBusy(false);}
  }
  const [status,setStatus]=useState('');const [busy,setBusy]=useState(false);
- const menu:[NavIconName,string][]=[['overview','Overview'],['security','Security'],['announcements','Announcements'],['embed-sender','Embed Sender'],['self-roles','Self-Roles'],['rules-guidelines','Rules & Guidelines'],['about-us','About Us'],['suggestions','Suggestions'],['orders','Orders'],['partnerships','Partnerships'],['verification','Verification'],['tickets','Tickets'],['giveaways','Giveaways'],['community','Joins & Invites'],['leveling','Leveling'],['staff','Staff Performance'],['analytics','Server Analytics'],['logs','Audit Logs']];
+ const menu:[NavIconName,string][]=[['overview','Overview'],['security','Security'],['announcements','Announcements'],['embed-sender','Embed Sender'],['server-messages','Server Messages'],['self-roles','Self-Roles'],['rules-guidelines','Rules & Guidelines'],['about-us','About Us'],['suggestions','Suggestions'],['orders','Orders'],['partnerships','Partnerships'],['verification','Verification'],['tickets','Tickets'],['giveaways','Giveaways'],['community','Joins & Invites'],['leveling','Leveling'],['staff','Staff Performance'],['analytics','Server Analytics'],['logs','Audit Logs']];
  async function send(url:string,data:unknown){
   setBusy(true);setStatus('');
   try{const payload=data as Record<string,unknown>;const isPanel=url==='/api/panels';const form=new FormData();if(isPanel)for(const [key,value] of Object.entries(payload))form.set(key,String(value??''));const r=await fetch(url,isPanel?{method:'POST',body:form}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const j=await r.json();setStatus(r.ok?'✓ Išsaugota sėkmingai':j.error??'Įvyko klaida');if(r.ok&&url.includes('announce')){setTitle('');setDescription('');}}catch{setStatus('Nepavyko susisiekti su serveriu');}finally{setBusy(false);}
  }
  return <div className="shell"><aside className="sidebar"><div className="brand"><img className="brandlogo" src="/lextrum-logo.png" alt="Lextrum logo"/> Lex<span>trum</span></div><div className="sidecaption">WORKSPACE</div><div className="guild"><span className="guildicon">D</span><div><strong>{guildName}</strong><small>Private server</small></div></div><div className="sidecaption">MANAGEMENT</div><nav>{menu.map(([id,label])=><button key={id} onClick={()=>{setTab(id);setStatus('');}} className={tab===id?'active':''}><span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:22,flexShrink:0}}><NavIcon name={id}/></span>{label}</button>)}</nav><div className="sidebarbottom"><div className="online">● Bot connected</div><form method="post" action="/api/auth/logout"><button className="logout">Atsijungti</button></form></div></aside><main className="content"><header><div><div className="eyebrow">LEXTRUM / {tab.toUpperCase()}</div><h1>{menu.find(x=>x[0]===tab)?.[1]}</h1></div><div className="profile"><span className="avatar">{user.username.slice(0,1).toUpperCase()}</span><span>{user.username}</span></div></header>{status&&<div className="notice">{status}</div>}
  {tab==='embed-sender'&&<EmbedSender channels={channels} roles={roles}/>}
+ {tab==='server-messages'&&<ServerMessages channels={channels}/>}
  {tab==='self-roles'&&<SelfRoles channels={channels} roles={roles}/>}
  {tab==='rules-guidelines'&&<RulesGuidelines channels={channels}/>}
  {tab==='about-us'&&<AboutUs channels={channels}/>}
