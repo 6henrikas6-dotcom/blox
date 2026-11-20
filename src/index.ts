@@ -373,7 +373,7 @@ client.on(Events.InteractionCreate,async interaction=>{
       if(!item.fileName){
         const preparing=new ContainerBuilder().setAccentColor(0xf0b34e)
          .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📦 Your order is being prepared**'))
-         .addTextDisplayComponents(new TextDisplayBuilder().setContent('**Order:** #'+orderNumber+'\\n**Product:** #'+productNumber+' — '+item.productName+'\\n\\n⏳ Your product file has not been uploaded yet. Our team is preparing your order.\\n\\n**Please try `/recieveorder` again later.** Once your file is ready, you will be able to accept the delivery terms and receive it directly in your DMs.'));
+         .addTextDisplayComponents(new TextDisplayBuilder().setContent('**Order:** #'+orderNumber+'\n**Product:** #'+productNumber+' — '+item.productName+'\n\n⏳ Your product file has not been uploaded yet. Our team is preparing your order.\n\n**Please try `/recieveorder` again later.** Once your file is ready, you will be able to accept the delivery terms and receive it directly in your DMs.'));
         await interaction.reply({flags:MessageFlags.Ephemeral|MessageFlags.IsComponentsV2,components:[preparing]});return;
       }
       if(item.deliveredAt||item.deliveryState!=='pending'){await interaction.reply({content:'Ši prekė jau atsiimta arba šiuo metu išsiunčiama.',flags:MessageFlags.Ephemeral});return;}
