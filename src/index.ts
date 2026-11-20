@@ -366,14 +366,15 @@ client.on(Events.InteractionCreate,async interaction=>{
       const post=await channel.messages.fetch(messageId).catch(()=>null);
       const v2Suggestion=post?.flags.has(MessageFlags.IsComponentsV2)?post.components.find(c=>c.type===17):null;
       const v2Data=v2Suggestion?.toJSON() as unknown as {type:17;accent_color?:number;components?:Array<{type:number;content?:string}>}|undefined;
-      const v2Valid=Boolean(v2Data?.components?.some(c=>c.type===10&&c.content?.startsWith('**💡 Naujas pasiūlymas**')));
+      const isOurSuggestion=await db.auditEvent.findFirst({where:{guildId:id,event:'SUGGESTION',detail:messageId},select:{id:true}});
+      const v2Valid=Boolean(isOurSuggestion&&v2Data?.components?.some(c=>c.type===10&&c.content?.includes('**Autorius:**')));
       if(!post||post.author.id!==client.user?.id||(!v2Valid&&(!post.embeds[0]||!post.embeds[0].title?.startsWith('💡')))){await interaction.reply({content:'Nerastas šio boto pasiūlymas nurodytame kanale.',flags:MessageFlags.Ephemeral});return;}
       const labels:Record<string,string>={pending:'⏳ Pending',accepted:'✅ Accepted',in_progress:'🔧 In Progress',implemented:'🚀 Implemented',denied:'❌ Denied'};
       const colors:Record<string,number>={pending:0x8066f2,accepted:0x57f287,in_progress:0xfee75c,implemented:0x2ecc71,denied:0xed4245};
       if(v2Data?.components&&v2Valid){
         const updated=v2Data.components.map(child=>{
           if(child.type!==10||!child.content?.startsWith('**Būsena:**'))return child;
-          return {...child,content:'**Būsena:** '+(labels[status]??status)+(note?'\n**Staff komentaras:** '+note.slice(0,500):'')+'\n-# 👍 Pritariu • 👎 Nepritariu'};
+          return {...child,content:'**Būsena:** '+(labels[status]??status)+(note?'\n**Staff komentaras:** '+note.slice(0,500):'')};
         });
         await post.edit({components:[{type:17,accent_color:colors[status]??0x8066f2,components:updated} as unknown as ContainerBuilder],allowedMentions:{parse:[]}});
       }else{
@@ -395,13 +396,25 @@ client.on(Events.InteractionCreate,async interaction=>{
       const channel=await guild.channels.fetch(cfg.suggestionChannelId).catch(()=>null);
       if(!channel||channel.type!==ChannelType.GuildText){await interaction.reply({content:'Pasiūlymų kanalas nerastas arba neprieinamas.',flags:MessageFlags.Ephemeral});return;}
       await interaction.deferReply({flags:MessageFlags.Ephemeral});
-      const proposalContent='**💡 Naujas pasiūlymas**\n\n'+idea+'\n\n**Autorius:** <@'+interaction.user.id+'>'+(reason?'\n\n**Kodėl?**\n'+reason:'');
+      const settingRecord=await db.auditEvent.findFirst({where:{guildId:id,event:'SUGGESTION_SETTINGS'},orderBy:{createdAt:'desc'},select:{detail:true}});
+      let settings:Record<string,string>={};
+      try{if(settingRecord?.detail)settings=JSON.parse(settingRecord.detail) as Record<string,string>;}catch{}
+      const heading=(settings.title||'Naujas pasiūlymas').slice(0,90);
+      const pending=(settings.pendingLabel||'⏳ Pending').slice(0,80);
+      const proposalContent='**💡 '+heading+'**\n\n'+idea+'\n\n**Autorius:** <@'+interaction.user.id+'>'+(reason?'\n\n**Kodėl?**\n'+reason:'');
       if(proposalContent.length>3900){await interaction.editReply('Pasiūlymas per ilgas V2 panelei.');return;}
+      const emojiValue=(value:string)=>{const match=/^<(a?):([a-zA-Z0-9_]+):(\d{17,20})>$/.exec(value);return match?{id:match[3],name:match[2],animated:match[1]==='a'}:{name:value};};
+      const upEmoji=settings.upEmoji||'👍',downEmoji=settings.downEmoji||'👎';
+      const upLabel=(settings.upLabel||'Pritariu').slice(0,45),downLabel=(settings.downLabel||'Nepritariu').slice(0,45);
+      const color=settings.color&&/^#[0-9a-fA-F]{6}$/.test(settings.color)?parseInt(settings.color.slice(1),16):0x8066f2;
       const proposalChildren:Record<string,unknown>[]=[{type:10,content:proposalContent}];
       if(attachment)proposalChildren.push({type:12,items:[{media:{url:attachment.url}}]});
-      proposalChildren.push({type:10,content:'**Būsena:** ⏳ Pending\n-# 👍 Pritariu • 👎 Nepritariu'});
-      const posted=await channel.send({flags:MessageFlags.IsComponentsV2,components:[{type:17,accent_color:0x8066f2,components:proposalChildren} as unknown as ContainerBuilder],allowedMentions:{parse:[]}});
-      await Promise.allSettled([posted.react('👍'),posted.react('👎')]);
+      proposalChildren.push({type:10,content:'**Būsena:** '+pending});
+      proposalChildren.push({type:1,components:[
+        {type:2,style:3,custom_id:'lx_suggest:up',label:upLabel+' · 0',emoji:emojiValue(upEmoji)},
+        {type:2,style:4,custom_id:'lx_suggest:down',label:downLabel+' · 0',emoji:emojiValue(downEmoji)}
+      ]});
+      const posted=await channel.send({flags:MessageFlags.IsComponentsV2,components:[{type:17,accent_color:color,components:proposalChildren} as unknown as ContainerBuilder],allowedMentions:{parse:[]}});
       await db.auditEvent.create({data:{guildId:id,event:'SUGGESTION',actorId:interaction.user.id,detail:posted.id}});
       await interaction.editReply('💡 Pasiūlymas paskelbtas: '+posted.url);
       return;
