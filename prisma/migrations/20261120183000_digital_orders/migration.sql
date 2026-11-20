@@ -18,6 +18,7 @@ CREATE TABLE "DigitalOrderItem" (
     "fileName" TEXT,
     "fileMime" TEXT,
     "fileData" BYTEA,
+    "deliveryState" TEXT NOT NULL DEFAULT 'pending',
     "deliveredTo" TEXT,
     "deliveredAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
