@@ -327,6 +327,66 @@ client.on(Events.InteractionCreate,async interaction=>{
       await db.communityPanel.upsert({where:{guildId:id},create:{guildId:id,feedbackChannelId:channel.id},update:{feedbackChannelId:channel.id}});
       await interaction.reply({content:'⭐ Transcript ir feedback kanalas nustatytas: <#'+channel.id+'>',flags:MessageFlags.Ephemeral});return;
     }
+    if(cmd==='createorder'){
+      if(!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){
+        await interaction.reply({content:'Tik administracija gali kurti užsakymus.',flags:MessageFlags.Ephemeral});return;
+      }
+      const orderNumber=interaction.options.getString('ordernumber',true).trim();
+      const productName=interaction.options.getString('product_name',true).trim();
+      const productNumber=(interaction.options.getString('productnumber')??'1').trim();
+      const buyerId=interaction.options.getUser('buyer')?.id;
+      if(!/^[a-zA-Z0-9_-]{3,40}$/.test(orderNumber)||!/^[a-zA-Z0-9_-]{1,30}$/.test(productNumber)){
+        await interaction.reply({content:'Leidžiami tik raidžių, skaičių, brūkšnelių ir _ numeriai.',flags:MessageFlags.Ephemeral});return;
+      }
+      const existing=await db.digitalOrder.findUnique({where:{guildId_orderNumber:{guildId:id,orderNumber}},include:{items:true}});
+      if(existing?.buyerId&&buyerId&&existing.buyerId!==buyerId&&existing.items.some(item=>item.deliveredAt)){
+        await interaction.reply({content:'Šio užsakymo prekė jau perduota kitam pirkėjui.',flags:MessageFlags.Ephemeral});return;
+      }
+      const itemExisting=existing?.items.find(item=>item.productNumber===productNumber);
+      if(itemExisting?.deliveredAt){
+        await interaction.reply({content:'Šis produktas jau atsiimtas ir nebegali būti keičiamas.',flags:MessageFlags.Ephemeral});return;
+      }
+      const order=await db.digitalOrder.upsert({
+        where:{guildId_orderNumber:{guildId:id,orderNumber}},
+        create:{guildId:id,orderNumber,productName,buyerId:buyerId??null},
+        update:{productName,...(buyerId?{buyerId}:{})}
+      });
+      await db.digitalOrderItem.upsert({
+        where:{orderId_productNumber:{orderId:order.id,productNumber}},
+        create:{orderId:order.id,productNumber,productName},
+        update:{productName}
+      });
+      await audit(id,'ORDER_CREATED',interaction.user.id,orderNumber+' #'+productNumber);
+      await interaction.reply({content:'📦 **Order #'+orderNumber+'** · Prekė #'+productNumber+' — '+productName+'\n'+(buyerId?'Pirkėjas: <@'+buyerId+'>':'⚠️ Pirkėjas dar nepriskirtas')+'\nFailą gali įkelti svetainės **Orders** skiltyje. Atsiėmimas: `/recieveorder`.',flags:MessageFlags.Ephemeral});return;
+    }
+    if(cmd==='recieveorder'){
+      const orderNumber=interaction.options.getString('ordernumber',true).trim();
+      const productNumber=interaction.options.getString('productnumber',true).trim();
+      if(!/^[a-zA-Z0-9_-]{3,40}$/.test(orderNumber)||!/^[a-zA-Z0-9_-]{1,30}$/.test(productNumber)){
+        await interaction.reply({content:'Netinkamas užsakymo arba prekės numeris.',flags:MessageFlags.Ephemeral});return;
+      }
+      const order=await db.digitalOrder.findUnique({where:{guildId_orderNumber:{guildId:id,orderNumber}},include:{items:{select:{id:true,productName:true,productNumber:true,fileName:true,deliveredAt:true,deliveryState:true}}}});
+      const item=order?.items.find(item=>item.productNumber===productNumber);
+      if(!order||!item){await interaction.reply({content:'Nerastas toks užsakymas arba produkto numeris.',flags:MessageFlags.Ephemeral});return;}
+      if(!order.buyerId){await interaction.reply({content:'Užsakymas dar nepriskirtas pirkėjui. Susisiek su administracija.',flags:MessageFlags.Ephemeral});return;}
+      if(order.buyerId!==interaction.user.id){await interaction.reply({content:'Šis užsakymas nepriskirtas tavo Discord paskyrai.',flags:MessageFlags.Ephemeral});return;}
+      if(!item.fileName){await interaction.reply({content:'Šiai prekei failas dar neįkeltas. Susisiek su administracija.',flags:MessageFlags.Ephemeral});return;}
+      if(item.deliveredAt||item.deliveryState!=='pending'){await interaction.reply({content:'Ši prekė jau atsiimta arba šiuo metu išsiunčiama.',flags:MessageFlags.Ephemeral});return;}
+      const terms='**🔐 Skaitmeninės prekės gavimo taisyklės**\n\n' +
+       '• Gauta prekė skirta tik tau. Be pardavėjo leidimo **negalima platinti, perparduoti, viešinti, nutekinti (leakinti)** failo, jo kopijų ar turinio.\n' +
+       '• Neperduok failo kitiems asmenims, serveriams ar svetainėms.\n' +
+       '• Nepažeisk autoriaus licencijos ir autorių teisių.\n' +
+       '• Pažeidus šias sąlygas, prieiga prie ateities prekių gali būti apribota pagal pirkimo susitarimą.\n\n' +
+       '**Ar sutinki?** Paspaudus „Sutinku“, prekė bus išsiųsta tau **asmenine Discord žinute (DM)**.';
+      const container=new ContainerBuilder().setAccentColor(0x8066f2)
+       .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📦 Užsakymas #'+orderNumber+' · Produktas #'+productNumber+'**\n'+item.productName))
+       .addTextDisplayComponents(new TextDisplayBuilder().setContent(terms))
+       .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId('lx_order_accept:'+item.id).setLabel('✅ Sutinku / Accept').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('lx_order_decline:'+item.id).setLabel('❌ Nesutinku / Decline').setStyle(ButtonStyle.Secondary)
+       ));
+      await interaction.reply({flags:MessageFlags.Ephemeral|MessageFlags.IsComponentsV2,components:[container]});return;
+    }
     if(cmd==='suggestion-config'){
       if(!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){await interaction.reply({content:'Reikia Manage Server leidimo.',flags:MessageFlags.Ephemeral});return;}
       const channel=interaction.options.getChannel('channel',true);
