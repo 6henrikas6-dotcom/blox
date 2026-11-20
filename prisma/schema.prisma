@@ -128,3 +128,31 @@ model MemberInvite {
  @@id([guildId,userId])
  @@index([guildId,inviterId])
 }
+
+// Digital fulfilment: files are private PostgreSQL bytea values, never public URLs.
+model DigitalOrder {
+ id String @id @default(cuid())
+ guildId String
+ orderNumber String
+ buyerId String?
+ productName String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ items DigitalOrderItem[]
+ @@unique([guildId,orderNumber])
+ @@index([guildId,buyerId])
+}
+model DigitalOrderItem {
+ id String @id @default(cuid())
+ orderId String
+ productNumber String
+ productName String
+ fileName String?
+ fileMime String?
+ fileData Bytes?
+ deliveredTo String?
+ deliveredAt DateTime?
+ createdAt DateTime @default(now())
+ order DigitalOrder @relation(fields:[orderId],references:[id],onDelete:Cascade)
+ @@unique([orderId,productNumber])
+}
