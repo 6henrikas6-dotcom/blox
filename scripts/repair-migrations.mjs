@@ -43,6 +43,21 @@ function markApplied(name) {
   execFileSync('./node_modules/.bin/prisma', ['migrate', 'resolve', '--applied', name], { stdio: 'inherit' });
 }
 try {
+  // The digital order migration may have been interrupted after creating some tables.
+  // Never drop tables or files: retry its now-idempotent SQL after resolving only a failed entry.
+  const failedOrderRows = await prisma.$queryRaw`
+    SELECT migration_name, finished_at, rolled_back_at, logs
+    FROM "_prisma_migrations"
+    WHERE migration_name = '20261120183000_digital_orders'
+    ORDER BY started_at DESC
+  `;
+  const orderAlreadyApplied = failedOrderRows.some(row => row.finished_at !== null && row.rolled_back_at === null);
+  const latestFailure = failedOrderRows.find(row => row.finished_at === null && row.rolled_back_at === null);
+  if (!orderAlreadyApplied && latestFailure) {
+    console.log('Digital order migration was interrupted. Reconciling failed migration record, then retrying non-destructive SQL.');
+    console.log('Previous database migration error: '+String(latestFailure.logs??'').slice(0,1100));
+    execFileSync('./node_modules/.bin/prisma', ['migrate','resolve','--rolled-back','20261120183000_digital_orders'], {stdio:'inherit'});
+  }
   const rows = await prisma.$queryRaw`
     SELECT table_name, column_name, data_type
     FROM information_schema.columns
