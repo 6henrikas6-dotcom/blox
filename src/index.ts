@@ -797,6 +797,54 @@ async function checkTicketSla(){
 client.once(Events.ClientReady,()=>{setInterval(()=>checkTicketSla().catch(e=>log.error(e,'Ticket SLA scheduler')),5*60_000);checkTicketSla().catch(e=>log.error(e,'Ticket SLA initial check'));});
 client.once(Events.ClientReady,()=>{setInterval(()=>finishGiveaways().catch(e=>log.error(e,'Giveaway scheduler')),30_000);finishGiveaways().catch(e=>log.error(e));});
 
+// Suggestions Components V2 voting. Votes are stored in existing AuditEvent rows.
+client.on(Events.InteractionCreate,async interaction=>{
+ if(!interaction.isButton()||!interaction.inGuild()||!['lx_suggest:up','lx_suggest:down'].includes(interaction.customId))return;
+ try{
+  await interaction.deferReply({flags:MessageFlags.Ephemeral});
+  const guildId=interaction.guildId,messageId=interaction.message.id;
+  if(!interaction.message.flags.has(MessageFlags.IsComponentsV2)||interaction.message.author.id!==client.user?.id){
+   await interaction.editReply('Netinkama pasiūlymo panelė.');return;
+  }
+  const existing=await db.auditEvent.findFirst({where:{guildId,event:'SUGGESTION',detail:messageId},select:{id:true}});
+  if(!existing){await interaction.editReply('Šis pasiūlymas nebeaktyvus.');return;}
+  const event='SUGGESTION_VOTE:'+messageId;
+  const direction=interaction.customId.endsWith(':up')?'up':'down';
+  const previous=await db.auditEvent.findFirst({where:{guildId,event,actorId:interaction.user.id},orderBy:[{createdAt:'desc'},{id:'desc'}],select:{detail:true}});
+  const vote=previous?.detail===direction?'none':direction;
+  await db.auditEvent.create({data:{guildId,event,actorId:interaction.user.id,detail:vote}});
+  const records=await db.auditEvent.findMany({where:{guildId,event},orderBy:[{createdAt:'asc'},{id:'asc'}],select:{actorId:true,detail:true}});
+  const votes=new Map<string,string>();
+  for(const record of records)if(record.actorId)votes.set(record.actorId,record.detail??'none');
+  let up=0,down=0;
+  for(const result of votes.values()){if(result==='up')up++;else if(result==='down')down++;}
+  const message=await interaction.channel?.messages.fetch(messageId).catch(()=>null);
+  if(message?.flags.has(MessageFlags.IsComponentsV2)){
+   const container=message.components.find(c=>c.type===17);
+   if(container){
+    const raw=container.toJSON() as unknown as {type:number;accent_color?:number;components?:Array<Record<string,unknown>>};
+    const updated=(raw.components??[]).map(child=>{
+     if(child.type!==1)return child;
+     const items=child.components as Array<Record<string,unknown>>|undefined;
+     if(!items?.some(item=>typeof item.custom_id==='string'&&item.custom_id.startsWith('lx_suggest:')))return child;
+     return {...child,components:items.map(item=>{
+      if(item.custom_id!=='lx_suggest:up'&&item.custom_id!=='lx_suggest:down')return item;
+      const count=item.custom_id==='lx_suggest:up'?up:down;
+      const label=String(item.label??'Balsuoti').replace(/ · \d+$/,'').slice(0,65);
+      return {...item,label:label+' · '+count};
+     })};
+    });
+    await message.edit({components:[{type:17,accent_color:raw.accent_color,components:updated} as unknown as ContainerBuilder]});
+   }
+  }
+  await interaction.editReply(vote==='none'?'Balsas atšauktas.':vote==='up'?'✅ Balsavai už pasiūlymą!':'✅ Balsavai prieš pasiūlymą!');
+ }catch(error){
+  log.error(error,'Suggestion V2 vote failed');
+  if(interaction.deferred||interaction.replied)await interaction.editReply('Nepavyko užregistruoti balso.').catch(()=>{});
+  else await interaction.reply({content:'Nepavyko užregistruoti balso.',flags:MessageFlags.Ephemeral}).catch(()=>{});
+ }
+});
+
 // Lextrum dashboard self-role buttons and dropdown. Allowed roles are recorded per message in AuditEvent.
 client.on(Events.InteractionCreate,async interaction=>{
  if(!interaction.inGuild())return;
