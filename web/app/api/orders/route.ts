@@ -35,7 +35,7 @@ export async function POST(request:NextRequest){
  const file=form.get('file');
  if(file!==null&&(!(file instanceof File)||!file.size||file.size>MAX_FILE))
   return NextResponse.json({error:'Pridėk failą iki 8 MB. Failai saugomi privačioje duomenų bazėje.'},{status:400});
- let bytes:Uint8Array|undefined;
+ let bytes:Uint8Array<ArrayBuffer>|undefined;
  if(file instanceof File){bytes=new Uint8Array(await file.arrayBuffer());}
  try{
   const current=await db.digitalOrder.findUnique({where:{guildId_orderNumber:{guildId,orderNumber}},include:{items:true}});
