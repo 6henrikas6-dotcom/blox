@@ -367,10 +367,15 @@ client.on(Events.InteractionCreate,async interaction=>{
       }
       const order=await db.digitalOrder.findUnique({where:{guildId_orderNumber:{guildId:id,orderNumber}},include:{items:{select:{id:true,productName:true,productNumber:true,fileName:true,deliveredAt:true,deliveryState:true}}}});
       const item=order?.items.find(item=>item.productNumber===productNumber);
-      if(!order||!item){await interaction.reply({content:'Nerastas toks užsakymas arba produkto numeris.',flags:MessageFlags.Ephemeral});return;}
+      if(!order||!item){await interaction.reply({content:'Order or product not found. Please check the order and product numbers, or contact support.',flags:MessageFlags.Ephemeral});return;}
       if(!order.buyerId){await interaction.reply({content:'Užsakymas dar nepriskirtas pirkėjui. Susisiek su administracija.',flags:MessageFlags.Ephemeral});return;}
       if(order.buyerId!==interaction.user.id){await interaction.reply({content:'Šis užsakymas nepriskirtas tavo Discord paskyrai.',flags:MessageFlags.Ephemeral});return;}
-      if(!item.fileName){await interaction.reply({content:'Šiai prekei failas dar neįkeltas. Susisiek su administracija.',flags:MessageFlags.Ephemeral});return;}
+      if(!item.fileName){
+        const preparing=new ContainerBuilder().setAccentColor(0xf0b34e)
+         .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📦 Your order is being prepared**'))
+         .addTextDisplayComponents(new TextDisplayBuilder().setContent('**Order:** #'+orderNumber+'\\n**Product:** #'+productNumber+' — '+item.productName+'\\n\\n⏳ Your product file has not been uploaded yet. Our team is preparing your order.\\n\\n**Please try `/recieveorder` again later.** Once your file is ready, you will be able to accept the delivery terms and receive it directly in your DMs.'));
+        await interaction.reply({flags:MessageFlags.Ephemeral|MessageFlags.IsComponentsV2,components:[preparing]});return;
+      }
       if(item.deliveredAt||item.deliveryState!=='pending'){await interaction.reply({content:'Ši prekė jau atsiimta arba šiuo metu išsiunčiama.',flags:MessageFlags.Ephemeral});return;}
       const terms='**🔐 Skaitmeninės prekės gavimo taisyklės**\n\n' +
        '• Gauta prekė skirta tik tau. Be pardavėjo leidimo **negalima platinti, perparduoti, viešinti, nutekinti (leakinti)** failo, jo kopijų ar turinio.\n' +
