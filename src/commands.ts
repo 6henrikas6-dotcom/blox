@@ -53,5 +53,13 @@ export const commands = [
  new SlashCommandBuilder().setName('dm-update').setDescription('Siųsti atnaujinimą DM užsiprenumeravusiems nariams').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addStringOption(o=>o.setName('title').setDescription('Atnaujinimo pavadinimas').setMinLength(3).setMaxLength(100).setRequired(true))
   .addStringOption(o=>o.setName('message').setDescription('Atnaujinimo tekstas').setMinLength(5).setMaxLength(1500).setRequired(true)),
+ new SlashCommandBuilder().setName('createorder').setDescription('Sukurti skaitmeninį užsakymą (administratoriams)').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .addStringOption(o=>o.setName('ordernumber').setDescription('Užsakymo numeris').setMinLength(3).setMaxLength(40).setRequired(true))
+  .addStringOption(o=>o.setName('product_name').setDescription('Produkto pavadinimas').setMinLength(1).setMaxLength(150).setRequired(true))
+  .addUserOption(o=>o.setName('buyer').setDescription('Pirkėjas (rekomenduojama)'))
+  .addStringOption(o=>o.setName('productnumber').setDescription('Prekės numeris (numatyta: 1)').setMaxLength(30)),
+ new SlashCommandBuilder().setName('recieveorder').setDescription('Atsiimti priskirtą užsakymo prekę į DM')
+  .addStringOption(o=>o.setName('ordernumber').setDescription('Užsakymo numeris').setRequired(true))
+  .addStringOption(o=>o.setName('productnumber').setDescription('Prekės numeris, pvz. 1').setRequired(true)),
  new SlashCommandBuilder().setName('rank').setDescription('Show your activity XP')
 ].map(command=>command.toJSON());
