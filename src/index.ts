@@ -980,7 +980,7 @@ client.on(Events.InteractionCreate,async interaction=>{
     // Retry normal attachment delivery only for payload/validation errors, never when DMs are blocked.
     if(info.code===50007||info.code===50013)throw primaryError;
     await dm.send({
-     content:'📦 **Lextrum Development · Order #'+item.order.orderNumber+'**\\n✅ **Your product has been delivered!**\\n**Product:** '+item.productName+'\\n📎 Download your purchased file using the attachment below.\\n🔐 Do not redistribute, leak, publicly share or resell this file without permission.',
+     content:'📦 **Lextrum Development · Order #'+item.order.orderNumber+'**\n✅ **Your product has been delivered!**\n**Product:** '+item.productName+'\n📎 Download your purchased file using the attachment below.\n🔐 Do not redistribute, leak, publicly share or resell this file without permission.',
      files:[new AttachmentBuilder(Buffer.from(item.fileData),{name:safeFileName})],
      components:[new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId('lx_order_download:'+item.id).setLabel('Download File').setEmoji('📥').setStyle(ButtonStyle.Primary)
@@ -1019,7 +1019,7 @@ client.on(Events.InteractionCreate,async interaction=>{
   }
   const safeFileName=orderAttachmentName(item.fileName,item.id);
   const panel=new ContainerBuilder().setAccentColor(0x000000)
-   .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📥 Download File · Order #'+item.order.orderNumber+'**\\n\\n**Product:** '+item.productName+'\\n\\nYour purchased file is attached below.'))
+   .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📥 Download File · Order #'+item.order.orderNumber+'**\n\n**Product:** '+item.productName+'\n\nYour purchased file is attached below.'))
    .addFileComponents(new FileBuilder().setURL('attachment://'+safeFileName));
   const attachment=new AttachmentBuilder(Buffer.from(item.fileData),{name:safeFileName});
   try{
