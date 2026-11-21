@@ -386,7 +386,7 @@ client.on(Events.InteractionCreate,async interaction=>{
        '• Pažeidus šias sąlygas, prieiga prie ateities prekių gali būti apribota pagal pirkimo susitarimą.\n\n' +
        '**Ar sutinki?** Paspaudus „Sutinku“, prekė bus išsiųsta tau **asmenine Discord žinute (DM)**.';
       const container=new ContainerBuilder().setAccentColor(0x8066f2)
-       .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📦 Order #'+orderNumber+' · '+item.productName+'**))
+       .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📦 Order #'+orderNumber+' · '+item.productName+'**'))
        .addTextDisplayComponents(new TextDisplayBuilder().setContent(terms))
        .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setCustomId('lx_order_accept:'+item.id).setLabel('✅ Sutinku / Accept').setStyle(ButtonStyle.Success),
