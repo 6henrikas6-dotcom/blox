@@ -1,16 +1,20 @@
 'use client';
 import {useEffect,useState} from 'react';
 type PreparationStatus='preparing'|'reviewing'|'ready';
+type LibraryItem={id:string;name:string;fileName:string;fileSize:number};
 type Item={id:string;productNumber:string;productName:string;fileName:string|null;preparationStatus:PreparationStatus;deliveredAt:string|null;deliveredTo:string|null};
 const statusLabels:Record<PreparationStatus,string>={preparing:'⏳ Preparing — ruošiama',reviewing:'🔎 Under Review — tikrinama',ready:'✅ Ready — paruošta'};
 type Order={id:string;orderNumber:string;buyerId:string|null;productName:string;createdAt:string;items:Item[]};
 export function Orders(){
  const [orders,setOrders]=useState<Order[]>([]);
+ const [library,setLibrary]=useState<LibraryItem[]>([]);
+ const [libraryItemId,setLibraryItemId]=useState('');
  const [number,setNumber]=useState(''),[productNumber,setProductNumber]=useState('1'),[productName,setProductName]=useState('');
  const [buyerId,setBuyerId]=useState(''),[file,setFile]=useState<File|null>(null);
  const [preparationStatus,setPreparationStatus]=useState<PreparationStatus>('preparing');
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[status,setStatus]=useState('');
  async function refresh(){
+  try{const response=await fetch('/api/product-library',{cache:'no-store'});if(response.ok){const result=await response.json() as {items?:LibraryItem[]};setLibrary(result.items??[]);}}catch{}
   try{
    const response=await fetch('/api/orders',{cache:'no-store'});
    const data=await response.json() as {orders?:Order[];error?:string};
@@ -26,9 +30,10 @@ export function Orders(){
    const data=new FormData();
    for(const [key,value] of Object.entries({orderNumber:number,productNumber,productName,buyerId,preparationStatus}))data.set(key,value);
    if(file)data.set('file',file);
+   else if(libraryItemId)data.set('libraryItemId',libraryItemId);
    const response=await fetch('/api/orders',{method:'POST',body:data});
    const json=await response.json() as {error?:string};
-   if(response.ok){setStatus('✅ Užsakymas / prekė išsaugota!');setFile(null);await refresh();}
+   if(response.ok){setStatus('✅ Užsakymas / prekė išsaugota!');setFile(null);setLibraryItemId('');await refresh();}
    else setStatus(json.error??'Nepavyko išsaugoti.');
   }catch{setStatus('Nepavyko įkelti failo. Bandyk mažesnį nei 8 MB failą.');}
   finally{setBusy(false);}
@@ -48,14 +53,21 @@ export function Orders(){
     <option value="ready">✅ Ready — paruošta</option>
    </select></label>
    <p style={{fontSize:12}}>Kol būsena „Preparing“ arba „Under Review“, botas neleis atsiimti prekės, net jei failas jau įkeltas. „Ready“ galima nustatyti tik įkėlus failą.</p>
+   <label>📦 Pasirink produktą iš Product Library<select value={libraryItemId} disabled={!!file} onChange={e=>{const id=e.target.value;setLibraryItemId(id);const item=library.find(x=>x.id===id);if(item){setProductName(item.name);setPreparationStatus('ready');}}}>
+    <option value="">Nesirinkti — pridėsiu failą rankiniu būdu arba vėliau</option>
+    {library.map(item=><option key={item.id} value={item.id}>{item.name} — {item.fileName}</option>)}
+   </select></label>
+   {libraryItemId&&<p style={{fontSize:12}}>✅ Pasirinktas failas bus saugiai priskirtas šiam užsakymui, o originalas liks bibliotekoje. Būseną vis tiek gali pakeisti į „Preparing“ arba „Under Review“.</p>}
+   <p style={{fontSize:12}}>Arba įkelk naują failą rankiniu būdu (jei jo nėra bibliotekoje).</p>
    <label>Prekės failas (.rbxm, .rbxmx, .zip, .pdf ir kt.; iki 8 MB)<input type="file" onChange={e=>{
     const f=e.target.files?.[0]??null;
     if(f&&f.size>8*1024*1024){setStatus('Failas per didelis. Maksimaliai 8 MB.');e.target.value='';return;}
-    setFile(f);if(f)setPreparationStatus('ready');
+    setFile(f);if(f){setLibraryItemId('');setPreparationStatus('ready');}
    }}/></label>
    {file&&<p>📎 Pasirinkta: <strong>{file.name}</strong> ({(file.size/1024/1024).toFixed(2)} MB)</p>}
    <button className="primary" type="button" disabled={busy||!number.trim()||!productNumber.trim()||!productName.trim()} onClick={save}>{busy?'Saugoma...':'💾 Išsaugoti užsakymą ir failą'}</button>
    {status&&<p role="status" style={{color:status.startsWith('✅')?'#82ddb2':'#ffc6a5'}}>{status}</p>}
+   <p style={{fontSize:12}}>Produktus gali iš anksto įkelti atskiroje <strong>Product Library</strong> skiltyje, o tada pasirinkti juos čia. Rankinis failo įkėlimas lieka galimas.</p>
    <p style={{fontSize:12}}>Norėdamas pridėti dar vieną prekę prie esamo užsakymo, spausk „+ Naujas produktas“ dešinėje. Failai laikomi privačioje PostgreSQL duomenų bazėje, o ne viešame GitHub ar svetainės kataloge.</p>
   </section>
   <section className="panel">
@@ -72,9 +84,9 @@ export function Orders(){
      <p style={{fontSize:12}}>📎 {item.fileName??'Failas dar neįkeltas'}</p>
      <p style={{fontSize:12}}><strong>Būsena: {statusLabels[item.preparationStatus]??statusLabels.preparing}</strong></p>
      <p style={{fontSize:12}}>{item.deliveredAt?'✅ Išsiųsta į DM ('+new Date(item.deliveredAt).toLocaleString('lt-LT')+')':'⏳ Neatsiimta'}</p>
-     <button type="button" className="secondary" onClick={()=>{setNumber(order.orderNumber);setBuyerId(order.buyerId??'');setProductNumber(item.productNumber);setProductName(item.productName);setPreparationStatus(item.preparationStatus??'preparing');setFile(null);}}>Redaguoti / įkelti failą</button>
+     <button type="button" className="secondary" onClick={()=>{setNumber(order.orderNumber);setBuyerId(order.buyerId??'');setProductNumber(item.productNumber);setProductName(item.productName);setPreparationStatus(item.preparationStatus??'preparing');setLibraryItemId('');setFile(null);}}>Redaguoti / įkelti failą</button>
     </div>)}
-    <button type="button" className="secondary" onClick={()=>{setNumber(order.orderNumber);setBuyerId(order.buyerId??'');setProductNumber(String(order.items.length+1));setProductName('');setPreparationStatus('preparing');setFile(null);}}>+ Naujas produktas</button>
+    <button type="button" className="secondary" onClick={()=>{setNumber(order.orderNumber);setBuyerId(order.buyerId??'');setProductNumber(String(order.items.length+1));setProductName('');setPreparationStatus('preparing');setLibraryItemId('');setFile(null);}}>+ Naujas produktas</button>
    </div>)}
   </section>
  </div>;
