@@ -13,6 +13,9 @@ export function Orders(){
  const [buyerId,setBuyerId]=useState(''),[file,setFile]=useState<File|null>(null);
  const [preparationStatus,setPreparationStatus]=useState<PreparationStatus>('preparing');
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[status,setStatus]=useState('');
+ const [deleteOrderId,setDeleteOrderId]=useState<string|null>(null);
+ const [deleteConfirm,setDeleteConfirm]=useState('');
+ const [deleting,setDeleting]=useState(false);
  async function refresh(){
   try{const response=await fetch('/api/product-library',{cache:'no-store'});if(response.ok){const result=await response.json() as {items?:LibraryItem[]};setLibrary(result.items??[]);}}catch{}
   try{
@@ -37,6 +40,21 @@ export function Orders(){
    else setStatus(json.error??'Nepavyko išsaugoti.');
   }catch{setStatus('Nepavyko įkelti failo. Bandyk mažesnį nei 8 MB failą.');}
   finally{setBusy(false);}
+ }
+ async function deleteOrder(order:Order){
+  if(deleting||deleteConfirm!==order.orderNumber)return;
+  setDeleting(true);setStatus('');
+  try{
+   const response=await fetch('/api/orders',{method:'DELETE',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({orderId:order.id,confirmNumber:deleteConfirm})});
+   const result=await response.json() as {error?:string};
+   if(!response.ok){setStatus(result.error??'Nepavyko ištrinti užsakymo.');return;}
+   if(number===order.orderNumber){setNumber('');setProductName('');setProductNumber('1');setBuyerId('');setFile(null);setLibraryItemId('');setPreparationStatus('preparing');}
+   setDeleteOrderId(null);setDeleteConfirm('');
+   setStatus('✅ Užsakymas #'+order.orderNumber+' ištrintas.');
+   await refresh();
+  }catch{setStatus('Nepavyko ištrinti užsakymo. Patikrink ryšį.');}
+  finally{setDeleting(false);}
  }
  return <div className="twocol embed-builder">
   <section className="panel">
@@ -87,6 +105,21 @@ export function Orders(){
      <button type="button" className="secondary" onClick={()=>{setNumber(order.orderNumber);setBuyerId(order.buyerId??'');setProductNumber(item.productNumber);setProductName(item.productName);setPreparationStatus(item.preparationStatus??'preparing');setLibraryItemId('');setFile(null);}}>Redaguoti / įkelti failą</button>
     </div>)}
     <button type="button" className="secondary" onClick={()=>{setNumber(order.orderNumber);setBuyerId(order.buyerId??'');setProductNumber(String(order.items.length+1));setProductName('');setPreparationStatus('preparing');setLibraryItemId('');setFile(null);}}>+ Naujas produktas</button>
+    <div style={{marginTop:12,borderTop:'1px solid #34364b',paddingTop:12}}>
+     {deleteOrderId!==order.id
+      ?<button type="button" className="secondary" style={{color:'#ff8888'}} onClick={()=>{setDeleteOrderId(order.id);setDeleteConfirm('');}}>🗑️ Ištrinti užsakymą</button>
+      :<div style={{display:'grid',gap:9}}>
+       <p style={{fontSize:12,color:'#ffc6a5'}}>⚠️ Negrįžtamai ištrinsi visą užsakymą #{order.orderNumber}, visas jo prekes ir joms priskirtus failus. Jau išsiųstų DM žinučių tai neištrins. Product Library failai išliks.</p>
+       <label>Patvirtinimui įrašyk užsakymo numerį: <strong>{order.orderNumber}</strong>
+        <input value={deleteConfirm} onChange={e=>setDeleteConfirm(e.target.value)} placeholder={order.orderNumber} autoComplete="off"/>
+       </label>
+       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        <button type="button" className="secondary" disabled={deleting||deleteConfirm.trim()!==order.orderNumber}
+         style={{color:'#ff8888'}} onClick={()=>void deleteOrder(order)}>{deleting?'Trinama...':'🗑️ Patvirtinti ištrynimą'}</button>
+        <button type="button" className="secondary" disabled={deleting} onClick={()=>{setDeleteOrderId(null);setDeleteConfirm('');}}>Atšaukti</button>
+       </div>
+      </div>}
+    </div>
    </div>)}
   </section>
  </div>;
