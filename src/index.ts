@@ -361,19 +361,21 @@ client.on(Events.InteractionCreate,async interaction=>{
     }
     if(cmd==='recieveorder'){
       const orderNumber=interaction.options.getString('ordernumber',true).trim();
-      const productNumber=interaction.options.getString('productnumber',true).trim();
-      if(!/^[a-zA-Z0-9_-]{3,40}$/.test(orderNumber)||!/^[a-zA-Z0-9_-]{1,30}$/.test(productNumber)){
-        await interaction.reply({content:'Netinkamas užsakymo arba prekės numeris.',flags:MessageFlags.Ephemeral});return;
+      const productName=interaction.options.getString('productname',true).trim();
+      if(!/^[a-zA-Z0-9_-]{3,40}$/.test(orderNumber)||!productName||productName.length>150){
+        await interaction.reply({content:'Invalid order number or product name.',flags:MessageFlags.Ephemeral});return;
       }
       const order=await db.digitalOrder.findUnique({where:{guildId_orderNumber:{guildId:id,orderNumber}},include:{items:{select:{id:true,productName:true,productNumber:true,fileName:true,deliveredAt:true,deliveryState:true}}}});
-      const item=order?.items.find(item=>item.productNumber===productNumber);
-      if(!order||!item){await interaction.reply({content:'Order or product not found. Please check the order and product numbers, or contact support.',flags:MessageFlags.Ephemeral});return;}
+      const matches=order?.items.filter(item=>item.productName.trim().toLocaleLowerCase('en-US')===productName.toLocaleLowerCase('en-US'))??[];
+      if(matches.length>1){await interaction.reply({content:'Multiple products have that name in this order. Please contact support to clarify which product you want to receive.',flags:MessageFlags.Ephemeral});return;}
+      const item=matches[0];
+      if(!order||!item){await interaction.reply({content:'Order or product not found. Check the order number and enter the exact product name shown in your purchase.',flags:MessageFlags.Ephemeral});return;}
       if(!order.buyerId){await interaction.reply({content:'Užsakymas dar nepriskirtas pirkėjui. Susisiek su administracija.',flags:MessageFlags.Ephemeral});return;}
       if(order.buyerId!==interaction.user.id){await interaction.reply({content:'Šis užsakymas nepriskirtas tavo Discord paskyrai.',flags:MessageFlags.Ephemeral});return;}
       if(!item.fileName){
         const preparing=new ContainerBuilder().setAccentColor(0xf0b34e)
          .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📦 Your order is being prepared**'))
-         .addTextDisplayComponents(new TextDisplayBuilder().setContent('**Order:** #'+orderNumber+'\n**Product:** #'+productNumber+' — '+item.productName+'\n\n⏳ Your product file has not been uploaded yet. Our team is preparing your order.\n\n**Please try `/recieveorder` again later.** Once your file is ready, you will be able to accept the delivery terms and receive it directly in your DMs.'));
+         .addTextDisplayComponents(new TextDisplayBuilder().setContent('**Order:** #'+orderNumber+'\n**Product:** '+item.productName+'\n\n⏳ Your product file has not been uploaded yet. Our team is preparing your order.\n\n**Please try `/recieveorder` again later.** Once your file is ready, you will be able to accept the delivery terms and receive it directly in your DMs.'));
         await interaction.reply({flags:MessageFlags.Ephemeral|MessageFlags.IsComponentsV2,components:[preparing]});return;
       }
       if(item.deliveredAt||item.deliveryState!=='pending'){await interaction.reply({content:'Ši prekė jau atsiimta arba šiuo metu išsiunčiama.',flags:MessageFlags.Ephemeral});return;}
@@ -384,7 +386,7 @@ client.on(Events.InteractionCreate,async interaction=>{
        '• Pažeidus šias sąlygas, prieiga prie ateities prekių gali būti apribota pagal pirkimo susitarimą.\n\n' +
        '**Ar sutinki?** Paspaudus „Sutinku“, prekė bus išsiųsta tau **asmenine Discord žinute (DM)**.';
       const container=new ContainerBuilder().setAccentColor(0x8066f2)
-       .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📦 Užsakymas #'+orderNumber+' · Produktas #'+productNumber+'**\n'+item.productName))
+       .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📦 Order #'+orderNumber+' · '+item.productName+'**))
        .addTextDisplayComponents(new TextDisplayBuilder().setContent(terms))
        .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setCustomId('lx_order_accept:'+item.id).setLabel('✅ Sutinku / Accept').setStyle(ButtonStyle.Success),
