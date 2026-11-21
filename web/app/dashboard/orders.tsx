@@ -37,8 +37,8 @@ export function Orders(){
   <section className="panel">
    <h3>📦 Orders · Lextrum Delivery</h3>
    <p>Sukurk užsakymą, priskirk <strong>pirkėjo Discord ID</strong> ir įkelk prekę iš savo kompiuterio. Failą atiduoda tik botas per privatų DM, nariui patvirtinus neplatinimo taisykles.</p>
-   <label>Order Number (užsakymo numeris)<input maxLength={40} value={number} placeholder="LEX-1001" onChange={e=>setNumber(e.target.value)}/></label>
-   <label>Product Number (prekės numeris)<input maxLength={30} value={productNumber} placeholder="1" onChange={e=>setProductNumber(e.target.value)}/></label>
+   <label>Order Number (užsakymo numeris)<input maxLength={40} value={number} placeholder="LEX-1001" onChange={e=>{const next=e.target.value;setNumber(next);const matched=orders.find(o=>o.orderNumber===next);if(!matched){setProductNumber('1');setPreparationStatus('preparing');}}}/></label>
+   <p style={{fontSize:12}}>Prekės numeris priskiriamas automatiškai. Discord pirkėjas įves tik Order Number ir Product Name.</p>
    <label>Product Name (prekės pavadinimas)<input maxLength={150} value={productName} placeholder="Roblox Police Vehicle" onChange={e=>setProductName(e.target.value)}/></label>
    <label>Pirkėjo Discord User ID<input value={buyerId} maxLength={20} placeholder="123456789012345678" onChange={e=>setBuyerId(e.target.value.replace(/\s/g,''))}/></label>
    <p style={{fontSize:12}}>Be pirkėjo ID užsakymas nebus atiduodamas – taip apsaugosime prekę nuo svetimų asmenų. Galima sukurti užsakymą, o ID įrašyti vėliau.</p>
@@ -56,7 +56,7 @@ export function Orders(){
    {file&&<p>📎 Pasirinkta: <strong>{file.name}</strong> ({(file.size/1024/1024).toFixed(2)} MB)</p>}
    <button className="primary" type="button" disabled={busy||!number.trim()||!productNumber.trim()||!productName.trim()} onClick={save}>{busy?'Saugoma...':'💾 Išsaugoti užsakymą ir failą'}</button>
    {status&&<p role="status" style={{color:status.startsWith('✅')?'#82ddb2':'#ffc6a5'}}>{status}</p>}
-   <p style={{fontSize:12}}>Įrašius esamą Order Number ir naują Product Number galima pridėti dar vieną prekę prie to paties užsakymo. Failai laikomi privačioje PostgreSQL duomenų bazėje, o ne viešame GitHub ar svetainės kataloge.</p>
+   <p style={{fontSize:12}}>Norėdamas pridėti dar vieną prekę prie esamo užsakymo, spausk „+ Naujas produktas“ dešinėje. Failai laikomi privačioje PostgreSQL duomenų bazėje, o ne viešame GitHub ar svetainės kataloge.</p>
   </section>
   <section className="panel">
    <h3>📋 Užsakymai</h3>
