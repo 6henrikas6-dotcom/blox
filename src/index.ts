@@ -953,13 +953,13 @@ client.on(Events.InteractionCreate,async interaction=>{
   try{
    const dm=await interaction.user.createDM();
    const attachment=new AttachmentBuilder(Buffer.from(item.fileData),{name:item.fileName});
-   const panel=new ContainerBuilder().setAccentColor(0x38bd9d)
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📦 Lextrum Development · Užsakymas #'+item.order.orderNumber+'**'))
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent('✅ **Prekė pristatyta!**\n\n**Produktas:** '+item.productName+'\n**Produkto numeris:** '+item.productNumber+'\n\n📎 Prisegtas tavo pirkinio failas.\n\n🔐 **Primename:** be pardavėjo sutikimo draudžiama platinti, nutekinti, viešai skelbti ar perparduoti failą.'));
+   const panel=new ContainerBuilder().setAccentColor(0x000000)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📦 Lextrum Development · Order #'+item.order.orderNumber+'**'))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent('✅ **Your product has been delivered!**\n\n**Product:** '+item.productName+'\n**Product number:** '+item.productNumber+'\n\n📎 Your purchased product file is attached to this message.\n\n🔐 **Reminder:** Sharing, leaking, publicly distributing or reselling this file without the seller’s permission is strictly prohibited.'));
    await dm.send({flags:MessageFlags.IsComponentsV2,components:[panel],files:[attachment],allowedMentions:{parse:[]}});
    await db.digitalOrderItem.update({where:{id:item.id},data:{deliveryState:'delivered',deliveredTo:interaction.user.id,deliveredAt:new Date()}});
    await db.auditEvent.create({data:{guildId:item.order.guildId,event:'ORDER_DELIVERED',actorId:interaction.user.id,detail:JSON.stringify({orderNumber:item.order.orderNumber,productNumber:item.productNumber})}}).catch(()=>{});
-   await interaction.editReply('✅ Prekė išsiųsta į tavo Discord **DM**! Patikrink asmenines žinutes.');
+   await interaction.editReply('✅ Your product has been sent to your Discord **DMs**! Please check your private messages.');
   }catch(error){
    log.warn({error,orderNumber:item.order.orderNumber,productNumber:item.productNumber},'Order DM delivery failed');
    await db.digitalOrderItem.updateMany({where:{id:item.id,deliveryState:'sending'},data:{deliveryState:'pending'}}).catch(e=>log.error(e,'Order release failed'));
