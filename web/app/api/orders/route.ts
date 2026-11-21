@@ -6,7 +6,7 @@ const orderPattern=/^[A-Za-z0-9_-]{3,40}$/;
 const productPattern=/^[A-Za-z0-9_-]{1,30}$/;
 const MAX_FILE=8*1024*1024;
 const safeName=(name:string)=>name.replace(/[\\/\x00-\x1f\x7f]/g,'_').slice(0,140);
-const serialize=(orders:Array<{id:string;orderNumber:string;buyerId:string|null;productName:string;createdAt:Date;items:Array<{id:string;productNumber:string;productName:string;fileName:string|null;deliveredAt:Date|null;deliveredTo:string|null}>}>)=>
+const serialize=(orders:Array<{id:string;orderNumber:string;buyerId:string|null;productName:string;createdAt:Date;items:Array<{id:string;productNumber:string;productName:string;fileName:string|null;deliveredAt:Date|null;deliveredTo:string|null;preparationStatus:string}>}>)=>
  orders.map(o=>({id:o.id,orderNumber:o.orderNumber,buyerId:o.buyerId,productName:o.productName,createdAt:o.createdAt,items:o.items}));
 export async function GET(){
  const admin=await requireAdmin();
@@ -15,7 +15,7 @@ export async function GET(){
  if(!guildId)return NextResponse.json({error:'Discord serveris nesukonfigūruotas.'},{status:500});
  const orders=await db.digitalOrder.findMany({where:{guildId},orderBy:{createdAt:'desc'},take:75,select:{
   id:true,orderNumber:true,buyerId:true,productName:true,createdAt:true,
-  items:{select:{id:true,productNumber:true,productName:true,fileName:true,deliveredAt:true,deliveredTo:true},orderBy:{createdAt:'asc'}}
+  items:{select:{id:true,productNumber:true,productName:true,fileName:true,deliveredAt:true,deliveredTo:true,preparationStatus:true},orderBy:{createdAt:'asc'}}
  }});
  return NextResponse.json({orders:serialize(orders)});
 }
@@ -28,7 +28,8 @@ export async function POST(request:NextRequest){
  let form:FormData;
  try{form=await request.formData();}catch{return NextResponse.json({error:'Neteisingi formos duomenys.'},{status:400});}
  const str=(field:string)=>{const v=form.get(field);return typeof v==='string'?v.trim():'';};
- const orderNumber=str('orderNumber'),productName=str('productName'),productNumber=str('productNumber'),buyerId=str('buyerId');
+ const orderNumber=str('orderNumber'),productName=str('productName'),productNumber=str('productNumber'),buyerId=str('buyerId'),preparationStatus=str('preparationStatus')||'preparing';
+ if(!['preparing','reviewing','ready'].includes(preparationStatus))return NextResponse.json({error:'Neteisinga prekės būsena.'},{status:400});
  if(!orderPattern.test(orderNumber)||!productPattern.test(productNumber)||!productName||productName.length>150)
   return NextResponse.json({error:'Nurodyk užsakymo numerį (3–40 simbolių), produkto numerį ir pavadinimą.'},{status:400});
  if(buyerId&&!/^\d{17,20}$/.test(buyerId))return NextResponse.json({error:'Pirkėjo Discord ID turi būti 17–20 skaitmenų.'},{status:400});
@@ -42,7 +43,8 @@ export async function POST(request:NextRequest){
   if(current?.buyerId&&buyerId&&current.buyerId!==buyerId&&current.items.some(item=>item.deliveredAt))
    return NextResponse.json({error:'Negalima pakeisti pirkėjo, kai prekė jau atiduota.'},{status:409});
   const existingItem=current?.items.find(i=>i.productNumber===productNumber);
-  if(existingItem?.deliveredAt&&(file||existingItem.productName!==productName))
+  if(preparationStatus==='ready'&&!(file instanceof File)&&!existingItem?.fileName)return NextResponse.json({error:'Negalima pažymėti Ready, kol neįkeltas tikras prekės failas.'},{status:400});
+  if(existingItem?.deliveredAt&&(file||existingItem.productName!==productName||existingItem.preparationStatus!==preparationStatus))
    return NextResponse.json({error:'Ši prekė jau pristatyta. Jos failo keisti negalima.'},{status:409});
   const order=await db.digitalOrder.upsert({
    where:{guildId_orderNumber:{guildId,orderNumber}},
@@ -51,10 +53,10 @@ export async function POST(request:NextRequest){
   });
   const item=await db.digitalOrderItem.upsert({
    where:{orderId_productNumber:{orderId:order.id,productNumber}},
-   create:{orderId:order.id,productNumber,productName,...(file instanceof File?{fileName:safeName(file.name),fileMime:file.type||'application/octet-stream',fileData:bytes}: {})},
-   update:{productName,...(file instanceof File?{fileName:safeName(file.name),fileMime:file.type||'application/octet-stream',fileData:bytes,deliveredTo:null,deliveredAt:null}:{})}
+   create:{orderId:order.id,productNumber,productName,preparationStatus,...(file instanceof File?{fileName:safeName(file.name),fileMime:file.type||'application/octet-stream',fileData:bytes}: {})},
+   update:{productName,preparationStatus,...(file instanceof File?{fileName:safeName(file.name),fileMime:file.type||'application/octet-stream',fileData:bytes,deliveredTo:null,deliveredAt:null}:{})}
   });
-  await db.auditEvent.create({data:{guildId,actorId:admin.id,event:'ORDER_ITEM_SAVED',detail:JSON.stringify({orderNumber,productNumber,file:!!file,buyerId:buyerId||null})}}).catch(()=>{});
-  return NextResponse.json({ok:true,orderNumber,productNumber,itemId:item.id,fileUploaded:!!file});
+  await db.auditEvent.create({data:{guildId,actorId:admin.id,event:'ORDER_ITEM_SAVED',detail:JSON.stringify({orderNumber,productNumber,preparationStatus,file:!!file,buyerId:buyerId||null})}}).catch(()=>{});
+  return NextResponse.json({ok:true,orderNumber,productNumber,itemId:item.id,preparationStatus,fileUploaded:!!file});
  }catch{return NextResponse.json({error:'Nepavyko išsaugoti. Patikrink, ar užsakymo numeris jau naudojamas.'},{status:500});}
 }
