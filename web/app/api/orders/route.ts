@@ -74,3 +74,34 @@ export async function POST(request:NextRequest){
   return NextResponse.json({ok:true,orderNumber,productNumber,itemId:item.id,preparationStatus,fileUploaded:!!bytes,fromLibrary:!!libraryItemId});
  }catch{return NextResponse.json({error:'Nepavyko išsaugoti. Patikrink, ar užsakymo numeris jau naudojamas.'},{status:500});}
 }
+
+
+export async function DELETE(request:NextRequest){
+ const admin=await requireAdmin();
+ if(!admin)return NextResponse.json({error:'Tik administratoriams.'},{status:403});
+ if(!await validOrigin())return NextResponse.json({error:'Netinkama užklausos kilmė.'},{status:403});
+ const guildId=process.env.DISCORD_GUILD_ID;
+ if(!guildId)return NextResponse.json({error:'Discord serveris nesukonfigūruotas.'},{status:500});
+ let data:unknown;
+ try{data=await request.json();}catch{return NextResponse.json({error:'Neteisingi duomenys.'},{status:400});}
+ if(!data||typeof data!=='object')return NextResponse.json({error:'Neteisingi duomenys.'},{status:400});
+ const input=data as Record<string,unknown>;
+ const orderId=typeof input.orderId==='string'?input.orderId:'';
+ const confirmNumber=typeof input.confirmNumber==='string'?input.confirmNumber.trim():'';
+ if(!/^c[a-z0-9]{15,35}$/i.test(orderId)||!orderPattern.test(confirmNumber))
+  return NextResponse.json({error:'Netinkamas užsakymo patvirtinimas.'},{status:400});
+ try{
+  const order=await db.digitalOrder.findFirst({where:{id:orderId,guildId},
+   select:{id:true,orderNumber:true,items:{select:{deliveryState:true}}}});
+  if(!order)return NextResponse.json({error:'Užsakymas nerastas.'},{status:404});
+  if(order.orderNumber!==confirmNumber)
+   return NextResponse.json({error:'Patvirtinimo numeris nesutampa.'},{status:400});
+  if(order.items.some(item=>item.deliveryState==='sending'))
+   return NextResponse.json({error:'Užsakymo negalima ištrinti, kol vyksta failo siuntimas. Bandyk vėliau.'},{status:409});
+  const deleted=await db.digitalOrder.deleteMany({where:{id:order.id,guildId}});
+  if(!deleted.count)return NextResponse.json({error:'Užsakymas jau ištrintas.'},{status:404});
+  await db.auditEvent.create({data:{guildId,actorId:admin.id,event:'ORDER_DELETED',
+   detail:JSON.stringify({orderNumber:order.orderNumber,itemCount:order.items.length})}}).catch(()=>{});
+  return NextResponse.json({ok:true,orderNumber:order.orderNumber});
+ }catch{return NextResponse.json({error:'Nepavyko ištrinti užsakymo.'},{status:500});}
+}
