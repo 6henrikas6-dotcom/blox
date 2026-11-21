@@ -18,6 +18,32 @@ function orderAttachmentName(original:string,itemId:string){
  const extension=(/\.([a-zA-Z0-9]{1,12})$/.exec(original)?.[1]??'bin').toLowerCase();
  return 'lextrum-product-'+itemId+'.'+extension;
 }
+// Award the customer role only after delivery has been marked successful.
+// A missing role is created without privileges; role errors never block delivery.
+async function grantCustomerRole(guildId:string,userId:string){
+ try{
+  const guild=await client.guilds.fetch(guildId);
+  const member=await guild.members.fetch(userId);
+  const roles=await guild.roles.fetch();
+  const configured=process.env.CUSTOMER_ROLE_ID?.trim();
+  let role=configured?roles.get(configured):undefined;
+  if(configured&&!role){
+   log.warn({guildId,customerRoleId:configured},'Configured Customer role not found');
+   return;
+  }
+  if(!role)role=roles.find(r=>r.name.toLowerCase()==='customer'&&!r.managed);
+  if(!role){
+   role=await guild.roles.create({name:'Customer',permissions:[],reason:'Role for customers who received a Lextrum order'});
+   log.info({guildId,roleId:role.id},'Created Customer role without permissions');
+  }
+  if(member.roles.cache.has(role.id))return;
+  await member.roles.add(role,'Received a purchased Lextrum digital product');
+  log.info({guildId,userId,roleId:role.id},'Customer role granted');
+ }catch(error){
+  log.warn({error:orderDeliveryErrorInfo(error),guildId,userId},'Unable to grant Customer role; order delivery remains successful');
+ }
+}
+
 function orderDeliveryErrorInfo(error:unknown){
  const e=error as {name?:string;message?:string;code?:number|string;errors?:unknown;issues?:unknown;rawError?:unknown};
  return {name:e?.name??'Error',message:e?.message??String(error),code:e?.code??null,
@@ -988,6 +1014,7 @@ client.on(Events.InteractionCreate,async interaction=>{
     });
    }
    await db.digitalOrderItem.update({where:{id:item.id},data:{deliveryState:'delivered',deliveredTo:interaction.user.id,deliveredAt:new Date()}});
+   await grantCustomerRole(item.order.guildId,interaction.user.id);
    await db.auditEvent.create({data:{guildId:item.order.guildId,event:'ORDER_DELIVERED',actorId:interaction.user.id,detail:JSON.stringify({orderNumber:item.order.orderNumber,productNumber:item.productNumber})}}).catch(()=>{});
    await interaction.editReply('✅ Your product has been sent to your Discord **DMs**! Please check your private messages.');
   }catch(error){
