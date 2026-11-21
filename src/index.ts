@@ -14,6 +14,16 @@ if(!DISCORD_TOKEN || !DATABASE_URL) throw new Error('Missing DISCORD_TOKEN or DA
 const db=new PrismaClient();
 const log=pino({level:process.env.LOG_LEVEL??'info'});
 const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMembers,GatewayIntentBits.GuildMessages,GatewayIntentBits.MessageContent]});
+function orderAttachmentName(original:string,itemId:string){
+ const extension=(/\.([a-zA-Z0-9]{1,12})$/.exec(original)?.[1]??'bin').toLowerCase();
+ return 'lextrum-product-'+itemId+'.'+extension;
+}
+function orderDeliveryErrorInfo(error:unknown){
+ const e=error as {name?:string;message?:string;code?:number|string;errors?:unknown;issues?:unknown;rawError?:unknown};
+ return {name:e?.name??'Error',message:e?.message??String(error),code:e?.code??null,
+  issues:e?.issues??null,errors:e?.errors??e?.rawError??null};
+}
+
 const joins=new Map<string,number[]>();
 const cooldown=new Map<string,number>();
 const inviteCache=new Map<string,Map<string,{uses:number;inviterId:string|null}>>();
@@ -952,22 +962,40 @@ client.on(Events.InteractionCreate,async interaction=>{
   if(claim.count!==1){await interaction.editReply('Ši prekė jau siunčiama arba jau atsiimta.');return;}
   try{
    const dm=await interaction.user.createDM();
-   const attachment=new AttachmentBuilder(Buffer.from(item.fileData),{name:item.fileName});
+   // Safe ASCII attachment names prevent discord.js builder validation failures from spaces/special characters.
+   const safeFileName=orderAttachmentName(item.fileName,item.id);
+   const attachment=new AttachmentBuilder(Buffer.from(item.fileData),{name:safeFileName});
    const panel=new ContainerBuilder().setAccentColor(0x000000)
     .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📦 Lextrum Development · Order #'+item.order.orderNumber+'**'))
     .addTextDisplayComponents(new TextDisplayBuilder().setContent('✅ **Your product has been delivered!**\n\n**Product:** '+item.productName+'\n**Product number:** '+item.productNumber+'\n\n📎 **Your product file is below.** Use Discord’s file download control or the **Download File** button.\n\n🔐 **Reminder:** Sharing, leaking, publicly distributing or reselling this file without the seller’s permission is strictly prohibited.'))
-    .addFileComponents(new FileBuilder().setURL('attachment://'+item.fileName))
+    .addFileComponents(new FileBuilder().setURL('attachment://'+safeFileName))
     .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId('lx_order_download:'+item.id).setLabel('Download File').setEmoji('📥').setStyle(ButtonStyle.Primary)
     ));
-   await dm.send({flags:MessageFlags.IsComponentsV2,components:[panel],files:[attachment],allowedMentions:{parse:[]}});
+   try{
+    await dm.send({flags:MessageFlags.IsComponentsV2,components:[panel],files:[attachment],allowedMentions:{parse:[]}});
+   }catch(primaryError){
+    const info=orderDeliveryErrorInfo(primaryError);
+    log.warn({error:info,orderNumber:item.order.orderNumber,productNumber:item.productNumber},'Order V2 file message failed, trying regular Discord file attachment');
+    // Retry normal attachment delivery only for payload/validation errors, never when DMs are blocked.
+    if(info.code===50007||info.code===50013)throw primaryError;
+    await dm.send({
+     content:'📦 **Lextrum Development · Order #'+item.order.orderNumber+'**\\n✅ **Your product has been delivered!**\\n**Product:** '+item.productName+'\\n📎 Download your purchased file using the attachment below.\\n🔐 Do not redistribute, leak, publicly share or resell this file without permission.',
+     files:[new AttachmentBuilder(Buffer.from(item.fileData),{name:safeFileName})],
+     components:[new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId('lx_order_download:'+item.id).setLabel('Download File').setEmoji('📥').setStyle(ButtonStyle.Primary)
+     )],allowedMentions:{parse:[]}
+    });
+   }
    await db.digitalOrderItem.update({where:{id:item.id},data:{deliveryState:'delivered',deliveredTo:interaction.user.id,deliveredAt:new Date()}});
    await db.auditEvent.create({data:{guildId:item.order.guildId,event:'ORDER_DELIVERED',actorId:interaction.user.id,detail:JSON.stringify({orderNumber:item.order.orderNumber,productNumber:item.productNumber})}}).catch(()=>{});
    await interaction.editReply('✅ Your product has been sent to your Discord **DMs**! Please check your private messages.');
   }catch(error){
-   log.warn({error,orderNumber:item.order.orderNumber,productNumber:item.productNumber},'Order DM delivery failed');
+   const info=orderDeliveryErrorInfo(error);
+   log.warn({error:info,orderNumber:item.order.orderNumber,productNumber:item.productNumber},'Order DM delivery failed');
    await db.digitalOrderItem.updateMany({where:{id:item.id,deliveryState:'sending'},data:{deliveryState:'pending'}}).catch(e=>log.error(e,'Order release failed'));
-   await interaction.editReply('❌ Nepavyko išsiųsti DM. Įjunk asmenines žinutes iš serverio narių ir bandyk dar kartą.').catch(()=>{});
+   const errorMessage=info.code===50007?'❌ Discord blocked the DM (error 50007). Check privacy settings, shared server and whether the bot is blocked.':'❌ Your order could not be delivered due to a technical issue. Please try again or contact support.';
+   await interaction.editReply(errorMessage).catch(()=>{});
   }
  }catch(error){
   log.error(error,'Order acceptance failed');
@@ -989,11 +1017,19 @@ client.on(Events.InteractionCreate,async interaction=>{
      item.order.buyerId!==interaction.user.id||!item.fileData||!item.fileName){
    await interaction.reply({content:'This product is not available for your account. Please contact support.'});return;
   }
+  const safeFileName=orderAttachmentName(item.fileName,item.id);
   const panel=new ContainerBuilder().setAccentColor(0x000000)
-   .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📥 Download File · Order #'+item.order.orderNumber+'**\n\n**Product:** '+item.productName+'\n\nYour purchased file is attached below.'))
-   .addFileComponents(new FileBuilder().setURL('attachment://'+item.fileName));
-  const attachment=new AttachmentBuilder(Buffer.from(item.fileData),{name:item.fileName});
-  await interaction.reply({flags:MessageFlags.IsComponentsV2,components:[panel],files:[attachment],allowedMentions:{parse:[]}});
+   .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📥 Download File · Order #'+item.order.orderNumber+'**\\n\\n**Product:** '+item.productName+'\\n\\nYour purchased file is attached below.'))
+   .addFileComponents(new FileBuilder().setURL('attachment://'+safeFileName));
+  const attachment=new AttachmentBuilder(Buffer.from(item.fileData),{name:safeFileName});
+  try{
+   await interaction.reply({flags:MessageFlags.IsComponentsV2,components:[panel],files:[attachment],allowedMentions:{parse:[]}});
+  }catch(primaryError){
+   log.warn({error:orderDeliveryErrorInfo(primaryError)},'Download V2 reply failed, retrying a normal attachment');
+   if(!interaction.replied&&!interaction.deferred)await interaction.reply({
+    content:'📥 **Your product file** — '+item.productName,files:[new AttachmentBuilder(Buffer.from(item.fileData),{name:safeFileName})],allowedMentions:{parse:[]}
+   });
+  }
  }catch(error){
   log.error(error,'Order download button failed');
   if(!interaction.replied&&!interaction.deferred)await interaction.reply({content:'Download failed. Please try again or contact support.'}).catch(()=>{});
