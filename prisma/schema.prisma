@@ -158,3 +158,17 @@ model DigitalOrderItem {
  order DigitalOrder @relation(fields:[orderId],references:[id],onDelete:Cascade)
  @@unique([orderId,productNumber])
 }
+
+// Private reusable digital product file catalogue. Copies are attached to individual orders.
+model ProductLibraryItem {
+ id String @id @default(cuid())
+ guildId String
+ name String
+ fileName String
+ fileMime String
+ fileSize Int
+ fileData Bytes
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([guildId,createdAt])
+}
