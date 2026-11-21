@@ -1,11 +1,14 @@
 'use client';
 import {useEffect,useState} from 'react';
-type Item={id:string;productNumber:string;productName:string;fileName:string|null;deliveredAt:string|null;deliveredTo:string|null};
+type PreparationStatus='preparing'|'reviewing'|'ready';
+type Item={id:string;productNumber:string;productName:string;fileName:string|null;preparationStatus:PreparationStatus;deliveredAt:string|null;deliveredTo:string|null};
+const statusLabels:Record<PreparationStatus,string>={preparing:'⏳ Preparing — ruošiama',reviewing:'🔎 Under Review — tikrinama',ready:'✅ Ready — paruošta'};
 type Order={id:string;orderNumber:string;buyerId:string|null;productName:string;createdAt:string;items:Item[]};
 export function Orders(){
  const [orders,setOrders]=useState<Order[]>([]);
  const [number,setNumber]=useState(''),[productNumber,setProductNumber]=useState('1'),[productName,setProductName]=useState('');
  const [buyerId,setBuyerId]=useState(''),[file,setFile]=useState<File|null>(null);
+ const [preparationStatus,setPreparationStatus]=useState<PreparationStatus>('preparing');
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[status,setStatus]=useState('');
  async function refresh(){
   try{
@@ -21,7 +24,7 @@ export function Orders(){
   setBusy(true);setStatus('');
   try{
    const data=new FormData();
-   for(const [key,value] of Object.entries({orderNumber:number,productNumber,productName,buyerId}))data.set(key,value);
+   for(const [key,value] of Object.entries({orderNumber:number,productNumber,productName,buyerId,preparationStatus}))data.set(key,value);
    if(file)data.set('file',file);
    const response=await fetch('/api/orders',{method:'POST',body:data});
    const json=await response.json() as {error?:string};
@@ -39,10 +42,16 @@ export function Orders(){
    <label>Product Name (prekės pavadinimas)<input maxLength={150} value={productName} placeholder="Roblox Police Vehicle" onChange={e=>setProductName(e.target.value)}/></label>
    <label>Pirkėjo Discord User ID<input value={buyerId} maxLength={20} placeholder="123456789012345678" onChange={e=>setBuyerId(e.target.value.replace(/\s/g,''))}/></label>
    <p style={{fontSize:12}}>Be pirkėjo ID užsakymas nebus atiduodamas – taip apsaugosime prekę nuo svetimų asmenų. Galima sukurti užsakymą, o ID įrašyti vėliau.</p>
+   <label>Prekės būsena<select value={preparationStatus} onChange={e=>setPreparationStatus(e.target.value as PreparationStatus)}>
+    <option value="preparing">⏳ Preparing — ruošiama</option>
+    <option value="reviewing">🔎 Under Review — tikrinama</option>
+    <option value="ready">✅ Ready — paruošta</option>
+   </select></label>
+   <p style={{fontSize:12}}>Kol būsena „Preparing“ arba „Under Review“, botas neleis atsiimti prekės, net jei failas jau įkeltas. „Ready“ galima nustatyti tik įkėlus failą.</p>
    <label>Prekės failas (.rbxm, .rbxmx, .zip, .pdf ir kt.; iki 8 MB)<input type="file" onChange={e=>{
     const f=e.target.files?.[0]??null;
     if(f&&f.size>8*1024*1024){setStatus('Failas per didelis. Maksimaliai 8 MB.');e.target.value='';return;}
-    setFile(f);
+    setFile(f);if(f)setPreparationStatus('ready');
    }}/></label>
    {file&&<p>📎 Pasirinkta: <strong>{file.name}</strong> ({(file.size/1024/1024).toFixed(2)} MB)</p>}
    <button className="primary" type="button" disabled={busy||!number.trim()||!productNumber.trim()||!productName.trim()} onClick={save}>{busy?'Saugoma...':'💾 Išsaugoti užsakymą ir failą'}</button>
@@ -61,10 +70,11 @@ export function Orders(){
     {order.items.map(item=><div key={item.id} style={{padding:'8px 0',borderTop:'1px solid #34364b'}}>
      <strong>Produktas #{item.productNumber} — {item.productName}</strong>
      <p style={{fontSize:12}}>📎 {item.fileName??'Failas dar neįkeltas'}</p>
+     <p style={{fontSize:12}}><strong>Būsena: {statusLabels[item.preparationStatus]??statusLabels.preparing}</strong></p>
      <p style={{fontSize:12}}>{item.deliveredAt?'✅ Išsiųsta į DM ('+new Date(item.deliveredAt).toLocaleString('lt-LT')+')':'⏳ Neatsiimta'}</p>
-     <button type="button" className="secondary" onClick={()=>{setNumber(order.orderNumber);setBuyerId(order.buyerId??'');setProductNumber(item.productNumber);setProductName(item.productName);setFile(null);}}>Redaguoti / įkelti failą</button>
+     <button type="button" className="secondary" onClick={()=>{setNumber(order.orderNumber);setBuyerId(order.buyerId??'');setProductNumber(item.productNumber);setProductName(item.productName);setPreparationStatus(item.preparationStatus??'preparing');setFile(null);}}>Redaguoti / įkelti failą</button>
     </div>)}
-    <button type="button" className="secondary" onClick={()=>{setNumber(order.orderNumber);setBuyerId(order.buyerId??'');setProductNumber(String(order.items.length+1));setProductName('');setFile(null);}}>+ Naujas produktas</button>
+    <button type="button" className="secondary" onClick={()=>{setNumber(order.orderNumber);setBuyerId(order.buyerId??'');setProductNumber(String(order.items.length+1));setProductName('');setPreparationStatus('preparing');setFile(null);}}>+ Naujas produktas</button>
    </div>)}
   </section>
  </div>;
