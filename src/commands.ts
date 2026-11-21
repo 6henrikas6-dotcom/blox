@@ -58,8 +58,8 @@ export const commands = [
   .addStringOption(o=>o.setName('product_name').setDescription('Produkto pavadinimas').setMinLength(1).setMaxLength(150).setRequired(true))
   .addUserOption(o=>o.setName('buyer').setDescription('Pirkėjas (rekomenduojama)'))
   .addStringOption(o=>o.setName('productnumber').setDescription('Prekės numeris (numatyta: 1)').setMaxLength(30)),
- new SlashCommandBuilder().setName('recieveorder').setDescription('Atsiimti priskirtą užsakymo prekę į DM')
-  .addStringOption(o=>o.setName('ordernumber').setDescription('Užsakymo numeris').setRequired(true))
-  .addStringOption(o=>o.setName('productnumber').setDescription('Prekės numeris, pvz. 1').setRequired(true)),
+ new SlashCommandBuilder().setName('recieveorder').setDescription('Receive your purchased product in DMs')
+  .addStringOption(o=>o.setName('ordernumber').setDescription('Your order number').setRequired(true))
+  .addStringOption(o=>o.setName('productname').setDescription('Exact product name').setRequired(true)),
  new SlashCommandBuilder().setName('rank').setDescription('Show your activity XP')
 ].map(command=>command.toJSON());
