@@ -365,26 +365,41 @@ client.on(Events.InteractionCreate,async interaction=>{
       if(!/^[a-zA-Z0-9_-]{3,40}$/.test(orderNumber)||!productName||productName.length>150){
         await interaction.reply({content:'Invalid order number or product name.',flags:MessageFlags.Ephemeral});return;
       }
-      const order=await db.digitalOrder.findUnique({where:{guildId_orderNumber:{guildId:id,orderNumber}},include:{items:{select:{id:true,productName:true,productNumber:true,fileName:true,deliveredAt:true,deliveryState:true}}}});
+      const order=await db.digitalOrder.findUnique({where:{guildId_orderNumber:{guildId:id,orderNumber}},include:{items:{select:{id:true,productName:true,productNumber:true,fileName:true,deliveredAt:true,deliveryState:true,preparationStatus:true}}}});
       const matches=order?.items.filter(item=>item.productName.trim().toLocaleLowerCase('en-US')===productName.toLocaleLowerCase('en-US'))??[];
       if(matches.length>1){await interaction.reply({content:'Multiple products have that name in this order. Please contact support to clarify which product you want to receive.',flags:MessageFlags.Ephemeral});return;}
       const item=matches[0];
       if(!order||!item){await interaction.reply({content:'Order or product not found. Check the order number and enter the exact product name shown in your purchase.',flags:MessageFlags.Ephemeral});return;}
       if(!order.buyerId){await interaction.reply({content:'Užsakymas dar nepriskirtas pirkėjui. Susisiek su administracija.',flags:MessageFlags.Ephemeral});return;}
       if(order.buyerId!==interaction.user.id){await interaction.reply({content:'Šis užsakymas nepriskirtas tavo Discord paskyrai.',flags:MessageFlags.Ephemeral});return;}
-      if(!item.fileName){
-        const preparing=new ContainerBuilder().setAccentColor(0xf0b34e)
-         .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📦 Your order is being prepared**'))
-         .addTextDisplayComponents(new TextDisplayBuilder().setContent('**Order:** #'+orderNumber+'\n**Product:** '+item.productName+'\n\n⏳ Your product file has not been uploaded yet. Our team is preparing your order.\n\n**Please try `/recieveorder` again later.** Once your file is ready, you will be able to accept the delivery terms and receive it directly in your DMs.'));
-        await interaction.reply({flags:MessageFlags.Ephemeral|MessageFlags.IsComponentsV2,components:[preparing]});return;
+      if(item.deliveredAt||item.deliveryState!=='pending'){await interaction.reply({content:'This product has already been delivered or is currently being sent.',flags:MessageFlags.Ephemeral});return;}
+      if(!item.fileName||item.preparationStatus!=='ready'){
+        const reviewing=item.preparationStatus==='reviewing';
+        const heading=reviewing?'🔎 Your order is under review':'📦 Your order is being prepared';
+        const description=[
+         '**Order:** #'+orderNumber,
+         '**Product:** '+item.productName,
+         '',
+         reviewing?'Our team is currently checking your product before delivery.':'Your product is being prepared and is not ready for delivery yet.',
+         '',
+         '**Please try /recieveorder again later.**',
+         'Once your product is ready, you will be asked to accept the delivery terms before receiving the file in your DMs.'
+        ].join(String.fromCharCode(10));
+        const panel=new ContainerBuilder().setAccentColor(reviewing?0x5c85d6:0xf0b34e)
+         .addTextDisplayComponents(new TextDisplayBuilder().setContent('**'+heading+'**'))
+         .addTextDisplayComponents(new TextDisplayBuilder().setContent(description));
+        await interaction.reply({flags:MessageFlags.Ephemeral|MessageFlags.IsComponentsV2,components:[panel]});return;
       }
-      if(item.deliveredAt||item.deliveryState!=='pending'){await interaction.reply({content:'Ši prekė jau atsiimta arba šiuo metu išsiunčiama.',flags:MessageFlags.Ephemeral});return;}
-      const terms='**🔐 Skaitmeninės prekės gavimo taisyklės**\n\n' +
-       '• Gauta prekė skirta tik tau. Be pardavėjo leidimo **negalima platinti, perparduoti, viešinti, nutekinti (leakinti)** failo, jo kopijų ar turinio.\n' +
-       '• Neperduok failo kitiems asmenims, serveriams ar svetainėms.\n' +
-       '• Nepažeisk autoriaus licencijos ir autorių teisių.\n' +
-       '• Pažeidus šias sąlygas, prieiga prie ateities prekių gali būti apribota pagal pirkimo susitarimą.\n\n' +
-       '**Ar sutinki?** Paspaudus „Sutinku“, prekė bus išsiųsta tau **asmenine Discord žinute (DM)**.';
+      const terms=[
+       '**🔐 Digital Product Delivery Terms**',
+       '',
+       '• This product is licensed to you only. You may not leak, share, redistribute, upload publicly, or resell the file without permission.',
+       '• Do not give copies of this file to other people, servers, or websites.',
+       '• Respect the original creator’s licence and intellectual property rights.',
+       '• Violating these terms may restrict future deliveries under the purchase agreement.',
+       '',
+       '**Do you agree?** Accept to receive the purchased file privately in your Discord DMs.'
+      ].join(String.fromCharCode(10));
       const container=new ContainerBuilder().setAccentColor(0x8066f2)
        .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📦 Order #'+orderNumber+' · '+item.productName+'**'))
        .addTextDisplayComponents(new TextDisplayBuilder().setContent(terms))
@@ -926,13 +941,14 @@ client.on(Events.InteractionCreate,async interaction=>{
   if(!item||item.order.guildId!==interaction.guildId||item.order.buyerId!==interaction.user.id){
    await interaction.editReply('Užsakymas nepriskirtas tavo Discord paskyrai.');return;
   }
+  if(item.preparationStatus!=='ready'){await interaction.editReply('This order is not ready for delivery yet. Please try again later.');return;}
   if(!item.fileData||!item.fileName){
    await interaction.editReply('Failas dar neįkeltas. Kreipkis į administraciją.');return;
   }
   if(item.deliveredAt){
    await interaction.editReply('Ši prekė jau buvo išsiųsta. Jei failą pametei, kreipkis į administraciją.');return;
   }
-  const claim=await db.digitalOrderItem.updateMany({where:{id:item.id,deliveryState:'pending',deliveredAt:null},data:{deliveryState:'sending'}});
+  const claim=await db.digitalOrderItem.updateMany({where:{id:item.id,deliveryState:'pending',deliveredAt:null,preparationStatus:'ready'},data:{deliveryState:'sending'}});
   if(claim.count!==1){await interaction.editReply('Ši prekė jau siunčiama arba jau atsiimta.');return;}
   try{
    const dm=await interaction.user.createDM();
