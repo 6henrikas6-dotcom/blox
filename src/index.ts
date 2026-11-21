@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { randomInt } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
-import { Client, GatewayIntentBits, Events, PermissionFlagsBits, ChannelType, EmbedBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, Events, PermissionFlagsBits, ChannelType, EmbedBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder, FileBuilder } from 'discord.js';
 import pino from 'pino';
 import { REST, Routes } from 'discord.js';
 import { commands } from './commands.js';
@@ -955,7 +955,11 @@ client.on(Events.InteractionCreate,async interaction=>{
    const attachment=new AttachmentBuilder(Buffer.from(item.fileData),{name:item.fileName});
    const panel=new ContainerBuilder().setAccentColor(0x000000)
     .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📦 Lextrum Development · Order #'+item.order.orderNumber+'**'))
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent('✅ **Your product has been delivered!**\n\n**Product:** '+item.productName+'\n**Product number:** '+item.productNumber+'\n\n📎 Your purchased product file is attached to this message.\n\n🔐 **Reminder:** Sharing, leaking, publicly distributing or reselling this file without the seller’s permission is strictly prohibited.'));
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent('✅ **Your product has been delivered!**\n\n**Product:** '+item.productName+'\n**Product number:** '+item.productNumber+'\n\n📎 **Your product file is below.** Use Discord’s file download control or the **Download File** button.\n\n🔐 **Reminder:** Sharing, leaking, publicly distributing or reselling this file without the seller’s permission is strictly prohibited.'))
+    .addFileComponents(new FileBuilder().setURL('attachment://'+item.fileName))
+    .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId('lx_order_download:'+item.id).setLabel('Download File').setEmoji('📥').setStyle(ButtonStyle.Primary)
+    ));
    await dm.send({flags:MessageFlags.IsComponentsV2,components:[panel],files:[attachment],allowedMentions:{parse:[]}});
    await db.digitalOrderItem.update({where:{id:item.id},data:{deliveryState:'delivered',deliveredTo:interaction.user.id,deliveredAt:new Date()}});
    await db.auditEvent.create({data:{guildId:item.order.guildId,event:'ORDER_DELIVERED',actorId:interaction.user.id,detail:JSON.stringify({orderNumber:item.order.orderNumber,productNumber:item.productNumber})}}).catch(()=>{});
@@ -968,6 +972,31 @@ client.on(Events.InteractionCreate,async interaction=>{
  }catch(error){
   log.error(error,'Order acceptance failed');
   await interaction.editReply('Nepavyko pristatyti prekės. Kreipkis į administraciją.').catch(()=>{});
+ }
+});
+
+// Discord DM file-download button. Never expose an unauthenticated public file URL.
+client.on(Events.InteractionCreate,async interaction=>{
+ if(!interaction.isButton()||!interaction.customId.startsWith('lx_order_download:'))return;
+ const itemId=interaction.customId.slice('lx_order_download:'.length);
+ if(!/^c[a-z0-9]{15,35}$/i.test(itemId))return void await interaction.reply({content:'Invalid product.',flags:interaction.inGuild()?MessageFlags.Ephemeral:undefined});
+ try{
+  if(interaction.inGuild()||interaction.message.author.id!==client.user?.id){
+   await interaction.reply({content:'Please use the Download File button in your private delivery message.',flags:interaction.inGuild()?MessageFlags.Ephemeral:undefined});return;
+  }
+  const item=await db.digitalOrderItem.findUnique({where:{id:itemId},include:{order:true}});
+  if(!item||!item.deliveredAt||item.deliveryState!=='delivered'||item.deliveredTo!==interaction.user.id||
+     item.order.buyerId!==interaction.user.id||!item.fileData||!item.fileName){
+   await interaction.reply({content:'This product is not available for your account. Please contact support.'});return;
+  }
+  const panel=new ContainerBuilder().setAccentColor(0x000000)
+   .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📥 Download File · Order #'+item.order.orderNumber+'**\n\n**Product:** '+item.productName+'\n\nYour purchased file is attached below.'))
+   .addFileComponents(new FileBuilder().setURL('attachment://'+item.fileName));
+  const attachment=new AttachmentBuilder(Buffer.from(item.fileData),{name:item.fileName});
+  await interaction.reply({flags:MessageFlags.IsComponentsV2,components:[panel],files:[attachment],allowedMentions:{parse:[]}});
+ }catch(error){
+  log.error(error,'Order download button failed');
+  if(!interaction.replied&&!interaction.deferred)await interaction.reply({content:'Download failed. Please try again or contact support.'}).catch(()=>{});
  }
 });
 
