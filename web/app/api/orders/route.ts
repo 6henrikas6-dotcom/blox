@@ -33,18 +33,32 @@ export async function POST(request:NextRequest){
  if(!orderPattern.test(orderNumber)||!productPattern.test(productNumber)||!productName||productName.length>150)
   return NextResponse.json({error:'Nurodyk užsakymo numerį (3–40 simbolių), produkto numerį ir pavadinimą.'},{status:400});
  if(buyerId&&!/^\d{17,20}$/.test(buyerId))return NextResponse.json({error:'Pirkėjo Discord ID turi būti 17–20 skaitmenų.'},{status:400});
+ const libraryItemId=str('libraryItemId');
+ if(libraryItemId&&!/^c[a-z0-9]{15,35}$/i.test(libraryItemId))return NextResponse.json({error:'Invalid product library selection.'},{status:400});
  const file=form.get('file');
+ if(file&&libraryItemId)return NextResponse.json({error:'Choose either a library product or upload a new file, not both.'},{status:400});
  if(file!==null&&(!(file instanceof File)||!file.size||file.size>MAX_FILE))
   return NextResponse.json({error:'Pridėk failą iki 8 MB. Failai saugomi privačioje duomenų bazėje.'},{status:400});
  let bytes:Uint8Array<ArrayBuffer>|undefined;
- if(file instanceof File){bytes=new Uint8Array(await file.arrayBuffer());}
+ let selectedFileName:string|undefined,selectedFileMime:string|undefined;
+ if(file instanceof File){
+  bytes=new Uint8Array(await file.arrayBuffer());
+  selectedFileName=safeName(file.name);selectedFileMime=file.type||'application/octet-stream';
+ }else if(libraryItemId){
+  const libraryItem=await db.productLibraryItem.findFirst({where:{id:libraryItemId,guildId}});
+  if(!libraryItem)return NextResponse.json({error:'Selected product was not found in this server’s library.'},{status:404});
+  if(libraryItem.fileSize>MAX_FILE)return NextResponse.json({error:'Library file is too large for Discord delivery.'},{status:400});
+  bytes=new Uint8Array(libraryItem.fileData);
+  selectedFileName=libraryItem.fileName;
+  selectedFileMime=libraryItem.fileMime;
+ }
  try{
   const current=await db.digitalOrder.findUnique({where:{guildId_orderNumber:{guildId,orderNumber}},include:{items:true}});
   if(current?.buyerId&&buyerId&&current.buyerId!==buyerId&&current.items.some(item=>item.deliveredAt))
    return NextResponse.json({error:'Negalima pakeisti pirkėjo, kai prekė jau atiduota.'},{status:409});
   const existingItem=current?.items.find(i=>i.productNumber===productNumber);
-  if(preparationStatus==='ready'&&!(file instanceof File)&&!existingItem?.fileName)return NextResponse.json({error:'Negalima pažymėti Ready, kol neįkeltas tikras prekės failas.'},{status:400});
-  if(existingItem?.deliveredAt&&(file||existingItem.productName!==productName||existingItem.preparationStatus!==preparationStatus))
+  if(preparationStatus==='ready'&&!bytes&&!existingItem?.fileName)return NextResponse.json({error:'Negalima pažymėti Ready, kol neįkeltas tikras prekės failas.'},{status:400});
+  if(existingItem?.deliveredAt&&(bytes||existingItem.productName!==productName||existingItem.preparationStatus!==preparationStatus))
    return NextResponse.json({error:'Ši prekė jau pristatyta. Jos failo keisti negalima.'},{status:409});
   const order=await db.digitalOrder.upsert({
    where:{guildId_orderNumber:{guildId,orderNumber}},
@@ -53,10 +67,10 @@ export async function POST(request:NextRequest){
   });
   const item=await db.digitalOrderItem.upsert({
    where:{orderId_productNumber:{orderId:order.id,productNumber}},
-   create:{orderId:order.id,productNumber,productName,preparationStatus,...(file instanceof File?{fileName:safeName(file.name),fileMime:file.type||'application/octet-stream',fileData:bytes}: {})},
-   update:{productName,preparationStatus,...(file instanceof File?{fileName:safeName(file.name),fileMime:file.type||'application/octet-stream',fileData:bytes,deliveredTo:null,deliveredAt:null}:{})}
+   create:{orderId:order.id,productNumber,productName,preparationStatus,...(bytes?{fileName:selectedFileName!,fileMime:selectedFileMime!,fileData:bytes}: {})},
+   update:{productName,preparationStatus,...(bytes?{fileName:selectedFileName!,fileMime:selectedFileMime!,fileData:bytes,deliveredTo:null,deliveredAt:null}:{})}
   });
-  await db.auditEvent.create({data:{guildId,actorId:admin.id,event:'ORDER_ITEM_SAVED',detail:JSON.stringify({orderNumber,productNumber,preparationStatus,file:!!file,buyerId:buyerId||null})}}).catch(()=>{});
-  return NextResponse.json({ok:true,orderNumber,productNumber,itemId:item.id,preparationStatus,fileUploaded:!!file});
+  await db.auditEvent.create({data:{guildId,actorId:admin.id,event:'ORDER_ITEM_SAVED',detail:JSON.stringify({orderNumber,productNumber,preparationStatus,file:!!bytes,fromLibrary:!!libraryItemId,buyerId:buyerId||null})}}).catch(()=>{});
+  return NextResponse.json({ok:true,orderNumber,productNumber,itemId:item.id,preparationStatus,fileUploaded:!!bytes,fromLibrary:!!libraryItemId});
  }catch{return NextResponse.json({error:'Nepavyko išsaugoti. Patikrink, ar užsakymo numeris jau naudojamas.'},{status:500});}
 }
