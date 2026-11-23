@@ -163,7 +163,7 @@ export default function DashboardClient({analytics,feedbackChannelId,savedTicket
  }
  return <div className="shell"><aside className="sidebar"><div className="brand"><img className="brandlogo" src="/lextrum-logo.png" alt="Lextrum logo"/> Lex<span>trum</span></div><div className="sidecaption">WORKSPACE</div><div className="guild"><span className="guildicon">D</span><div><strong>{guildName}</strong><small>Private server</small></div></div><div className="sidecaption">MANAGEMENT</div><nav>{menu.map(([id,label])=><button key={id} onClick={()=>{setTab(id);setStatus('');}} className={tab===id?'active':''}><span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:22,flexShrink:0}}><NavIcon name={id}/></span>{label}</button>)}</nav><div className="sidebarbottom"><div className="online">● Bot connected</div><form method="post" action="/api/auth/logout"><button className="logout">Atsijungti</button></form></div></aside><main className="content"><header><div><div className="eyebrow">LEXTRUM / {tab.toUpperCase()}</div><h1>{menu.find(x=>x[0]===tab)?.[1]}</h1></div><div className="profile"><span className="avatar">{user.username.slice(0,1).toUpperCase()}</span><span>{user.username}</span></div></header>{status&&<div className="notice">{status}</div>}
  {tab==='embed-sender'&&<EmbedSender channels={channels} roles={roles}/>}
- {tab==='server-messages'&&<ServerMessages channels={channels}/>}
+ {tab==='server-messages'&&<ServerMessages channels={channels} roles={roles}/>}
  {tab==='self-roles'&&<SelfRoles channels={channels} roles={roles}/>}
  {tab==='rules-guidelines'&&<RulesGuidelines channels={channels}/>}
  {tab==='about-us'&&<AboutUs channels={channels}/>}
