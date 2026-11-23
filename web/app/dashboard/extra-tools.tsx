@@ -1,7 +1,7 @@
 'use client';
 import {useState} from 'react';
 type Item={id:string;name:string};
-type Shared={channels:Item[];roles:Item[]};
+type Shared={channels:(Item & {type?:number})[];roles:Item[]};
 const inputHint={fontSize:12,color:'#9aa1ba'};
 export function EmbedSender({channels,roles}:Shared){
  const [channel,setChannel]=useState(''),[username,setUsername]=useState('Lextrum Development'),[avatar,setAvatar]=useState('');
