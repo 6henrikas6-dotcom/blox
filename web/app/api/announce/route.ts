@@ -15,7 +15,10 @@ export async function POST(req:NextRequest){
  const senderName=string(form.get('username')).trim();
  const senderAvatar=string(form.get('avatarUrl')).trim();
  if(senderName.length>80)return NextResponse.json({error:'Siuntėjo vardas per ilgas (iki 80 simbolių).'},{status:400});
- const pingEveryone=string(form.get('everyone'))==='true';
+ const mentionAll=string(form.get('mentionAll')) || (string(form.get('everyone'))==='true'?'everyone':'none');
+ if(!['none','everyone','here'].includes(mentionAll))return NextResponse.json({error:'Neteisingas žymėjimas.'},{status:400});
+ const pingEveryone=mentionAll==='everyone'||mentionAll==='here';
+ const forumTitle=string(form.get('forumTitle')).trim();
  const roleId=string(form.get('roleId'));
  const requestedChannelId=string(form.get('channelId'));
  const partnershipUrl=string(form.get('partnershipUrl')).trim();
@@ -39,11 +42,14 @@ export async function POST(req:NextRequest){
  const cfg=await db.guildConfig.findUnique({where:{guildId}});
  const channelId=requestedChannelId||cfg?.announcementChannelId;
  if(!channelId||!/^\d{17,20}$/.test(channelId))return NextResponse.json({error:'Pasirink Discord kanalą'},{status:400});
+ let isForum=false;
  try{
   const channelRes=await fetch(discordApi+'/channels/'+channelId,{headers:{Authorization:'Bot '+token},cache:'no-store'});
   if(!channelRes.ok)return NextResponse.json({error:'Botas negali pasiekti pasirinkto kanalo'},{status:400});
   const channel=await channelRes.json() as {guild_id?:string;type?:number};
-  if(channel.guild_id!==guildId||![0,5].includes(channel.type??-1))return NextResponse.json({error:'Pasirink tekstinį kanalą šiame serveryje'},{status:400});
+  if(channel.guild_id!==guildId||![0,5,15].includes(channel.type??-1))return NextResponse.json({error:'Pasirink tekstinį arba Forum kanalą šiame serveryje'},{status:400});
+  isForum=channel.type===15;
+  if(isForum&&(!forumTitle||forumTitle.length>100))return NextResponse.json({error:'Forum įrašui reikia pavadinimo (iki 100 simbolių).'},{status:400});
  }catch{return NextResponse.json({error:'Nepavyko patikrinti kanalo'},{status:502});}
  let selectedRole='';
  if(roleId){
@@ -55,7 +61,7 @@ export async function POST(req:NextRequest){
    selectedRole=roleId;
   }catch{return NextResponse.json({error:'Nepavyko patikrinti rolės'},{status:502});}
  }
- const mentionText=[pingEveryone?'@everyone':'',selectedRole?'<@&'+selectedRole+'>':''].filter(Boolean).join(' ');
+ const mentionText=[mentionAll==='everyone'?'@everyone':mentionAll==='here'?'@here':'',selectedRole?'<@&'+selectedRole+'>':''].filter(Boolean).join(' ');
  const accent=/^#[0-9a-fA-F]{6}$/.test(color)?parseInt(color.slice(1),16):5793266;
  const children:Record<string,unknown>[]=[];
  const textParts=[mentionText,content,author?'**'+author.replace(/\*/g,'')+'**':'',title?'**'+title.replace(/\*/g,'')+'**':'',description].filter(Boolean);
@@ -71,9 +77,17 @@ export async function POST(req:NextRequest){
  if(footer)children.push({type:10,content:'-# '+footer.slice(0,1000).replace(/\n/g,' ')});
  if(!children.length)return NextResponse.json({error:'Pranešimas negali būti tuščias.'},{status:400});
  const payload:Record<string,unknown>={flags:32768,components:[{type:17,accent_color:accent,components:children}],allowed_mentions:{parse:pingEveryone?['everyone']:[],roles:selectedRole?[selectedRole]:[]}};
- const data=new FormData();data.set('payload_json',JSON.stringify(payload));
+ const data=new FormData();data.set('payload_json',JSON.stringify(isForum?{name:forumTitle,message:payload}:payload));
  if(file instanceof File){const name=file.type==='image/png'?'image.png':file.type==='image/jpeg'?'image.jpg':file.type==='image/webp'?'image.webp':'image.gif';data.set('files[0]',file,name);}
  try{
+  if(isForum){
+   // Forum threads must be created using the bot; channel webhooks cannot create forum posts.
+   const created=await fetch(discordApi+'/channels/'+channelId+'/threads',{method:'POST',headers:{Authorization:'Bot '+token},body:data,cache:'no-store'});
+   if(!created.ok){const detail=await created.text().catch(()=> '');return NextResponse.json({error:'Discord atmetė Forum įrašą ('+created.status+'). Patikrink Create Public Threads, Send Messages in Threads, Embed Links ir žymėjimo leidimus. '+detail.slice(0,180)},{status:502});}
+   const thread=await created.json() as {id:string};
+   await db.auditEvent.create({data:{guildId,actorId:user.id,event:'DASHBOARD_EMBED_FORUM',detail:JSON.stringify({channelId,threadId:thread.id,forumTitle})}}).catch(()=>{});
+   return NextResponse.json({ok:true,url:'https://discord.com/channels/'+guildId+'/'+thread.id});
+  }
   // Discord only permits custom sender usernames/avatars through webhooks.
   // Reuse the bot-created channel webhook instead of creating one per message.
   if(senderName||senderAvatar){
@@ -93,13 +107,13 @@ export async function POST(req:NextRequest){
    if(!sentResponse.ok)return NextResponse.json({error:'Discord atmetė webhook pranešimą ('+sentResponse.status+'). Patikrink įvestą nuotrauką.'},{status:502});
    const sent=await sentResponse.json() as {id?:string};
    await db.auditEvent.create({data:{guildId,actorId:user.id,event:'DASHBOARD_EMBED_SENDER',detail:JSON.stringify({channelId,messageId:sent.id??'',senderName:senderName||'Lextrum Development'})}}).catch(()=>{});
-   return NextResponse.json({ok:true,messageId:sent.id});
+   return NextResponse.json({ok:true,messageId:sent.id,url:'https://discord.com/channels/'+guildId+'/'+channelId+'/'+sent.id});
   }
   const res=await fetch(discordApi+'/channels/'+channelId+'/messages',{method:'POST',headers:{Authorization:'Bot '+token},body:data,cache:'no-store'});
   if(!res.ok)return NextResponse.json({error:'Discord atmetė pranešimą ('+res.status+'). Patikrink boto leidimus, failo dydį ir URL.'},{status:502});
   const sent=await res.json() as {id?:string;components?:Array<{components?:Array<{type:number;url?:string}>}>};
 
   await db.auditEvent.create({data:{guildId,actorId:user.id,event:partnershipUrl?'PARTNERSHIP_PUBLISHED':'DASHBOARD_ANNOUNCEMENT',detail:JSON.stringify({title:title||'Embed announcement',channelId,messageId:sent.id??'',partnerUrl:partnershipUrl||undefined})}}).catch(()=>{});
-  return NextResponse.json({ok:true});
+  return NextResponse.json({ok:true,url:'https://discord.com/channels/'+guildId+'/'+channelId+'/'+sent.id});
  }catch{return NextResponse.json({error:'Nepavyko susisiekti su Discord'},{status:502});}
 }
