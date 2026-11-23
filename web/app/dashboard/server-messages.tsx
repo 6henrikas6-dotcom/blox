@@ -1,14 +1,17 @@
 'use client';
 import {useEffect,useState} from 'react';
 
-type Channel={id:string;name:string};
-type Draft={channel:string;title:string;description:string;intro:string;footer:string;color:string;bannerUrl:string;thumbnailUrl:string;buttonLabel:string;buttonUrl:string};
-const initial:Draft={channel:'',title:'',description:'',intro:'',footer:'Lextrum Development',color:'#8066f2',bannerUrl:'',thumbnailUrl:'',buttonLabel:'',buttonUrl:''};
-export function ServerMessages({channels}:{channels:Channel[]}){
+type Channel={id:string;name:string;type?:number};
+type Role={id:string;name:string};
+type Draft={channel:string;forumTitle:string;roleId:string;mentionAll:string;title:string;description:string;intro:string;footer:string;color:string;bannerUrl:string;thumbnailUrl:string;buttonLabel:string;buttonUrl:string};
+const initial:Draft={channel:'',forumTitle:'',roleId:'',mentionAll:'none',title:'',description:'',intro:'',footer:'Lextrum Development',color:'#8066f2',bannerUrl:'',thumbnailUrl:'',buttonLabel:'',buttonUrl:''};
+export function ServerMessages({channels,roles}:{channels:Channel[];roles:Role[]}){
  const [draft,setDraft]=useState<Draft>(initial);
  const [banner,setBanner]=useState<File|null>(null),[thumbnail,setThumbnail]=useState<File|null>(null);
  const [bannerPreview,setBannerPreview]=useState(''),[thumbPreview,setThumbPreview]=useState('');
  const [busy,setBusy]=useState(false),[status,setStatus]=useState(''),[resultUrl,setResultUrl]=useState('');
+ const forum=channels.find(c=>c.id===draft.channel)?.type===15;
+ const mentionPreview=[draft.mentionAll==='everyone'?'@everyone':draft.mentionAll==='here'?'@here':'',draft.roleId?'@'+(roles.find(r=>r.id===draft.roleId)?.name??'role'):''].filter(Boolean).join(' ');
  const set=(key:keyof Draft,value:string)=>setDraft(prev=>({...prev,[key]:value}));
  useEffect(()=>{
   try{
@@ -46,7 +49,7 @@ export function ServerMessages({channels}:{channels:Channel[]}){
   try{
    const form=new FormData();
    for(const [key,value] of Object.entries({
-    channelId:draft.channel,title:draft.title,description:draft.description,intro:draft.intro,footer:draft.footer,
+    channelId:draft.channel,forumTitle:forum?draft.forumTitle:'',roleId:draft.roleId,mentionAll:draft.mentionAll,title:draft.title,description:draft.description,intro:draft.intro,footer:draft.footer,
     color:draft.color,bannerUrl:draft.bannerUrl,thumbnailUrl:draft.thumbnailUrl,
     buttonLabel:draft.buttonLabel,buttonUrl:draft.buttonUrl
    }))form.set(key,value);
@@ -63,7 +66,10 @@ export function ServerMessages({channels}:{channels:Channel[]}){
   <section className="panel">
    <h3>💬 Server Messages · Lextrum Bot</h3>
    <p>Siųsk pranešimus tiesiogiai iš tikrosios Lextrum boto paskyros, su jo vardu ir avataru. Čia nereikia įvesti ar keisti siuntėjo vardo. Įvairius siuntėjo vardus ir toliau gali naudoti atskiroje „Embed Sender“ skiltyje.</p>
-   <label>Discord kanalas<select value={draft.channel} onChange={e=>set('channel',e.target.value)}><option value="">Pasirink kanalą</option>{channels.map(c=><option key={c.id} value={c.id}>#{c.name}</option>)}</select></label>
+   <label>Discord kanalas<select value={draft.channel} onChange={e=>set('channel',e.target.value)}><option value="">Pasirink kanalą</option>{channels.map(c=><option key={c.id} value={c.id}>{c.type===15?'🗂 Forum · ':'#'}{c.name}</option>)}</select></label>
+   {forum&&<label>Forum įrašo pavadinimas<input value={draft.forumTitle} maxLength={100} onChange={e=>set('forumTitle',e.target.value)} placeholder="Pvz. Nauji automobiliai"/></label>}
+   <label>Žymėti visus<select value={draft.mentionAll} onChange={e=>set('mentionAll',e.target.value)}><option value="none">Nežymėti</option><option value="everyone">@everyone</option><option value="here">@here</option></select></label>
+   <label>Pažymėti rolę (nebūtina)<select value={draft.roleId} onChange={e=>set('roleId',e.target.value)}><option value="">Be rolės</option>{roles.map(r=><option key={r.id} value={r.id}>@{r.name}</option>)}</select></label>
    <label>Tekstas virš pavadinimo (nebūtina)<textarea maxLength={1000} rows={3} value={draft.intro} onChange={e=>set('intro',e.target.value)}/></label>
    <label>Pavadinimas<input maxLength={256} value={draft.title} onChange={e=>set('title',e.target.value)} placeholder="Serverio naujienos"/></label>
    <label>Pranešimo tekstas<textarea maxLength={3500} rows={7} value={draft.description} onChange={e=>set('description',e.target.value)} placeholder="Įrašyk pranešimą..."/></label>
@@ -77,7 +83,7 @@ export function ServerMessages({channels}:{channels:Channel[]}){
    <label>Nuorodos mygtuko tekstas (nebūtina)<input maxLength={80} value={draft.buttonLabel} onChange={e=>set('buttonLabel',e.target.value)} placeholder="Atidaryti svetainę"/></label>
    <label>Nuorodos mygtuko HTTPS adresas (nebūtina)<input type="url" value={draft.buttonUrl} onChange={e=>set('buttonUrl',e.target.value)} placeholder="https://..."/></label>
    <label>Poraštė<input maxLength={500} value={draft.footer} onChange={e=>set('footer',e.target.value)}/></label>
-   <button type="button" className="primary" disabled={busy||!draft.channel||(!draft.title.trim()&&!draft.description.trim()&&!draft.intro.trim())} onClick={publish}>{busy?'Siunčiama...':'🚀 Siųsti kaip Lextrum botą'}</button>
+   <button type="button" className="primary" disabled={busy||!draft.channel||(forum&&!draft.forumTitle.trim())||(!draft.title.trim()&&!draft.description.trim()&&!draft.intro.trim())} onClick={publish}>{busy?'Siunčiama...':forum?'🚀 Sukurti Forum įrašą':'🚀 Siųsti kaip Lextrum botą'}</button>
    {status&&<p role="status" style={{color:status.startsWith('✅')?'#82ddb2':'#ffc6a5'}}>{status}</p>}
    {resultUrl&&<p><a href={resultUrl} target="_blank" rel="noopener noreferrer" style={{color:'#bba9ff'}}>Atidaryti pranešimą Discord ↗</a></p>}
    <p style={{fontSize:12}}>Tai vienas Discord Components V2 pranešimas. Teksto juodraštis išsaugomas tavo naršyklėje, o paveikslėlį po atnaujinimo reikės pasirinkti iš naujo.</p>
@@ -85,9 +91,11 @@ export function ServerMessages({channels}:{channels:Channel[]}){
   <section className="panel preview">
    <h3>👁 Discord peržiūra · Components V2</h3>
    <div className="discord-preview">
+    {forum&&<h3>{draft.forumTitle||"Forum įrašo pavadinimas"}</h3>}
     <div className="discord-msg-head"><img className="discord-avatar" src="/lextrum-logo.png" alt="Lextrum" style={{objectFit:'cover'}}/><strong>Lextrum <small>APP</small></strong></div>
     <div className="embed rich-embed self-role-embed" style={{borderLeftColor:draft.color}}>
      {thumbPreview||draft.thumbnailUrl?<img className="embed-thumb" src={thumbPreview||draft.thumbnailUrl} alt="Maža nuotrauka"/>:null}
+     {mentionPreview&&<p style={{whiteSpace:'pre-wrap'}}>{mentionPreview}</p>}
      {draft.intro&&<p style={{whiteSpace:'pre-wrap'}}>{draft.intro}</p>}
      {draft.title&&<strong className="embed-title">{draft.title}</strong>}
      <p style={{whiteSpace:'pre-wrap'}}>{draft.description||'Čia bus tavo Lextrum serverio pranešimas.'}</p>
