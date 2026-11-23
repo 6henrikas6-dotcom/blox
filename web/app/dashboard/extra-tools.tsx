@@ -3,24 +3,32 @@ import {useState} from 'react';
 type Item={id:string;name:string};
 type Shared={channels:Item[];roles:Item[]};
 const inputHint={fontSize:12,color:'#9aa1ba'};
-export function EmbedSender({channels}:Shared){
+export function EmbedSender({channels,roles}:Shared){
  const [channel,setChannel]=useState(''),[username,setUsername]=useState('Lextrum Development'),[avatar,setAvatar]=useState('');
  const [title,setTitle]=useState(''),[body,setBody]=useState(''),[content,setContent]=useState(''),[footer,setFooter]=useState('');
+ const [forumTitle,setForumTitle]=useState(''),[roleId,setRoleId]=useState(''),[mentionAll,setMentionAll]=useState<'none'|'everyone'|'here'>('none');
  const [image,setImage]=useState(''),[thumb,setThumb]=useState(''),[color,setColor]=useState('#8066f2');
- const [file,setFile]=useState<File|null>(null),[busy,setBusy]=useState(false),[status,setStatus]=useState('');
+ const [file,setFile]=useState<File|null>(null),[busy,setBusy]=useState(false),[status,setStatus]=useState(''),[resultUrl,setResultUrl]=useState('');
+ const selected=channels.find(x=>x.id===channel);
+ const forum=selected?.type===15;
+ const mentions=[mentionAll==='everyone'?'@everyone':mentionAll==='here'?'@here':'',roleId?'@'+(roles.find(x=>x.id===roleId)?.name??'role'):''].filter(Boolean).join(' ');
  async function send(){
-  setBusy(true);setStatus('');
+  setBusy(true);setStatus('');setResultUrl('');
   try{
-   const f=new FormData();for(const [k,v] of Object.entries({channelId:channel,username,avatarUrl:avatar,title,description:body,content,footer,imageUrl:image,thumbnailUrl:thumb,color}))f.set(k,v);
+   const f=new FormData();for(const [k,v] of Object.entries({channelId:channel,username,avatarUrl:avatar,title,description:body,content,footer,imageUrl:image,thumbnailUrl:thumb,color,forumTitle:forum?forumTitle:'',roleId,mentionAll}))f.set(k,v);
    if(file)f.set('image',file);
-   const res=await fetch('/api/announce',{method:'POST',body:f});const json=await res.json();
+   const res=await fetch('/api/announce',{method:'POST',body:f});const json=await res.json() as {error?:string;url?:string};
    setStatus(res.ok?'✅ Pranešimas išsiųstas į Discord':json.error||'Nepavyko išsiųsti');
+   if(res.ok)setResultUrl(json.url??'');
   }catch{setStatus('Nepavyko prisijungti prie svetainės serverio.');}finally{setBusy(false);}
  }
- return <div className="twocol embed-builder"><section className="panel"><h3>✉️ Embed Sender</h3><p>Sukurk ir išsiųsk Discord pranešimą su pasirinktu siuntėjo vardu, avataru, spalva ir nuotrauka. Vardo ir avataro keitimui botui reikia Manage Webhooks teisės pasirinktame kanale.</p>
- <label>Kanalas<select value={channel} onChange={e=>setChannel(e.target.value)}><option value="">Pasirink kanalą</option>{channels.map(x=><option key={x.id} value={x.id}>#{x.name}</option>)}</select></label>
- <label>Siuntėjo vardas<input maxLength={80} value={username} onChange={e=>setUsername(e.target.value)} placeholder="Lextrum Development"/></label>
- <label>Siuntėjo avataro nuoroda (HTTPS)<input value={avatar} type="url" onChange={e=>setAvatar(e.target.value)} placeholder="https://.../avatar.png"/></label>
+ return <div className="twocol embed-builder"><section className="panel"><h3>✉️ Embed Sender</h3><p>Sukurk Discord pranešimą arba Forum įrašą su pasirinktu siuntėjo vardu, avataru, spalva ir nuotrauka. Tekstiniuose kanaluose vardui ir avatarui pakeisti botui reikia Manage Webhooks teisės.</p>
+ <label>Kanalas<select value={channel} onChange={e=>setChannel(e.target.value)}><option value="">Pasirink kanalą</option>{channels.map(x=><option key={x.id} value={x.id}>{x.type===15?'🗂 Forum · ':'#'}{x.name}</option>)}</select></label>
+ {forum&&<><label>Forum įrašo pavadinimas<input maxLength={100} value={forumTitle} onChange={e=>setForumTitle(e.target.value)} placeholder="Pvz. New Vehicle Release"/></label><p style={inputHint}>Forum įrašus kuria Lextrum botas. Discord neleidžia priskirti kitokio vardo ar avataro naujam Forum įrašui naudojant webhook.</p></>}
+ <label>Siuntėjo vardas<input maxLength={80} disabled={forum} value={username} onChange={e=>setUsername(e.target.value)} placeholder="Lextrum Development"/></label>
+ <label>Siuntėjo avataro nuoroda (HTTPS)<input value={avatar} disabled={forum} type="url" onChange={e=>setAvatar(e.target.value)} placeholder="https://.../avatar.png"/></label>
+ <label>Žymėjimas<select value={mentionAll} onChange={e=>setMentionAll(e.target.value as 'none'|'everyone'|'here')}><option value="none">Nėra</option><option value="everyone">@everyone</option><option value="here">@here</option></select></label>
+ <label>Pažymėti rolę (nebūtina)<select value={roleId} onChange={e=>setRoleId(e.target.value)}><option value="">Nepasirinkta</option>{roles.map(r=><option key={r.id} value={r.id}>@{r.name}</option>)}</select></label>
  <label>Tekstas virš embed<textarea rows={3} maxLength={2000} value={content} onChange={e=>setContent(e.target.value)}/></label>
  <label>Embed pavadinimas<input maxLength={256} value={title} onChange={e=>setTitle(e.target.value)}/></label>
  <label>Embed aprašymas<textarea rows={7} maxLength={4000} value={body} onChange={e=>setBody(e.target.value)}/></label>
@@ -29,9 +37,10 @@ export function EmbedSender({channels}:Shared){
  <label>Arba įkelk nuotrauką<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e=>setFile(e.target.files?.[0]??null)}/></label>
  <label>Mažos nuotraukos nuoroda<input type="url" value={thumb} onChange={e=>setThumb(e.target.value)} placeholder="https://.../icon.png"/></label>
  <label>Footer<input maxLength={2048} value={footer} onChange={e=>setFooter(e.target.value)}/></label>
- <button className="primary" disabled={busy||!channel||(!title.trim()&&!body.trim()&&!content.trim())} onClick={send}>{busy?'Siunčiama...':'🚀 Siųsti embed'}</button>
- {status&&<p role="status" className="notice" style={{marginTop:14}}>{status}</p>}</section>
- <section className="panel preview"><h3>👁 Discord peržiūra · Components V2</h3><div className="discord-preview"><div className="discord-msg-head">{avatar?<img src={avatar} alt="" className="discord-avatar" style={{objectFit:'cover'}}/>:<span className="discord-avatar">L</span>}<strong>{username||'Lextrum Development'} <small>BOT</small></strong></div>{content&&<p className="discord-content">{content}</p>}<div className="embed rich-embed self-role-embed" style={{borderLeftColor:color}}>{thumb&&<img className="embed-thumb" src={thumb} alt=""/>}<strong className="embed-title">{title||'Embed title'}</strong><p>{body||'Čia bus tavo pranešimo aprašymas.'}</p>{image&&<img className="self-role-top-image" src={image} alt="Embed banner"/>}{footer&&<small className="embed-footer">{footer}</small>}</div></div><p style={inputHint}>Peržiūra yra apytikslė. Discord atvaizdavimas gali šiek tiek skirtis.</p></section></div>;
+ <button className="primary" disabled={busy||!channel||(forum&&!forumTitle.trim())||(!title.trim()&&!body.trim()&&!content.trim())} onClick={send}>{busy?'Siunčiama...':forum?'🚀 Sukurti Forum įrašą':'🚀 Siųsti embed'}</button>
+ {status&&<p role="status" className="notice" style={{marginTop:14}}>{status}</p>}
+ {resultUrl&&<p><a href={resultUrl} target="_blank" rel="noopener noreferrer">Atidaryti Discord ↗</a></p>}</section>
+ <section className="panel preview"><h3>👁 Discord peržiūra</h3><div className="discord-preview">{forum&&<h3>{forumTitle||'Forum įrašo pavadinimas'}</h3>}<div className="discord-msg-head">{!forum&&avatar?<img src={avatar} alt="" className="discord-avatar" style={{objectFit:'cover'}}/>:<span className="discord-avatar">L</span>}<strong>{forum?'Lextrum Bot':username||'Lextrum Development'} <small>BOT</small></strong></div>{(mentions||content)&&<p className="discord-content">{[mentions,content].filter(Boolean).join('\n\n')}</p>}<div className="embed rich-embed self-role-embed" style={{borderLeftColor:color}}>{thumb&&<img className="embed-thumb" src={thumb} alt=""/>}<strong className="embed-title">{title||'Embed title'}</strong><p>{body||'Čia bus tavo pranešimo aprašymas.'}</p>{image&&<img className="self-role-top-image" src={image} alt="Embed banner"/>}{footer&&<small className="embed-footer">{footer}</small>}</div></div><p style={inputHint}>Peržiūra yra apytikslė. Žymėjimai suveiks tik turint reikiamas Discord teises.</p></section></div>;
 }
 // Crop uploaded banners into Discord-friendly wide images directly in the browser.
 async function cropSelfRoleBanner(file:File,kind:'top'|'bottom'):Promise<File>{
