@@ -327,14 +327,14 @@ client.on(Events.InteractionCreate,async interaction=>{
         if(users.length>50){await interaction.editReply('Found '+users.length+' buyers. The safe limit is 50 recipients per announcement; no DMs were sent.');return;}
         const token=randomUUID();
         pendingProductAnnouncements.set(token,{guildId:id,adminId:interaction.user.id,productId:product.id,productName:product.name,title,message,expires:Date.now()+10*60_000});
-        const preview=new ContainerBuilder().setAccentColor(0x8066f2)
-         .addTextDisplayComponents(new TextDisplayBuilder().setContent('**📣 Confirm Product Announcement**'))
-         .addTextDisplayComponents(new TextDisplayBuilder().setContent('**Product:** '+product.name.replace(/[@*_~`|]/g,'')+'\\n**Buyer accounts in Orders:** '+users.length+'\\n\\n**'+title.replace(/[@*_~`|]/g,'')+'**\\n'+message.replace(/@everyone|@here/g,'[mention disabled]')+'\\n\\nConfirm to send one private DM per eligible buyer (excluding opted-out users). This is for product updates, not advertising.'))
-         .addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(
+        const previewText='📣 **Confirm Product Announcement**\n**Product:** '+product.name.replace(/[@*_~`|]/g,'')+
+         '\n**Buyer accounts in Orders:** '+users.length+
+         '\n\n**'+title.replace(/[@*_~`|]/g,'')+'**\n'+message.replace(/@everyone|@here/g,'[mention disabled]')+
+         '\n\nConfirm to send one private DM per eligible buyer. Opted-out customers will be excluded. Only product-related updates are allowed.';
+        await interaction.editReply({content:previewText,components:[new ActionRowBuilder<ButtonBuilder>().addComponents(
           new ButtonBuilder().setCustomId('lx_prod_announce_confirm:'+token).setLabel('Confirm & send DMs').setStyle(ButtonStyle.Success),
           new ButtonBuilder().setCustomId('lx_prod_announce_cancel:'+token).setLabel('Cancel').setStyle(ButtonStyle.Secondary)
-         ));
-        await interaction.editReply({flags:MessageFlags.IsComponentsV2,components:[preview]});
+        )],allowedMentions:{parse:[]}});
       }catch(error){
         log.warn({error:orderDeliveryErrorInfo(error),guildId:id},'Product announcement preparation failed');
         await interaction.editReply('Unable to prepare the announcement. The order list may be too large or temporarily unavailable.');
@@ -1142,7 +1142,7 @@ client.on(Events.InteractionCreate,async interaction=>{
   await db.auditEvent.create({data:{guildId:pending.guildId,event:'PRODUCT_ANNOUNCEMENT_STARTED',actorId:interaction.user.id,detail:JSON.stringify({productId:product.id,title:pending.title,recipientCount:recipients.length})}});
   await interaction.editReply({content:'📨 Product announcement started for '+recipients.length+' buyer accounts. Sending DMs...',components:[]});
   let delivered=0,blocked=0,optedOut=0,notMember=0;
-  const clean=(text:string)=>text.replace(/@everyone|@here/g,'[mention disabled]').replace(/<@!?\\d+>/g,'[mention disabled]');
+  const clean=(text:string)=>text.replace(/@everyone|@here/g,'[mention disabled]').replace(/<@!?\d+>/g,'[mention disabled]');
   for(const userId of recipients){
    try{
     const subscription=await db.subscription.findUnique({where:{guildId_userId:{guildId:pending.guildId,userId}},select:{enabled:true}});
