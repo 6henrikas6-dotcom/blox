@@ -318,7 +318,7 @@ client.on(Events.InteractionCreate,async interaction=>{
         const productLabel=product.name.replace(/[@*_~`|]/g,'').slice(0,150);
         try{
           await recipient.send({
-            content:'🎁 **Lextrum Development · Product Delivery**\\n\\n**Product:** '+productLabel+'\\n\\n📎 Your product file is attached below.\\n🔐 Please respect the creator’s licence; do not share or resell this file without permission.',
+            content:'🎁 **Lextrum Development · Product Delivery**\n\n**Product:** '+productLabel+'\n\n📎 Your product file is attached below.\n🔐 Please respect the creator’s licence; do not share or resell this file without permission.',
             files:[new AttachmentBuilder(Buffer.from(product.fileData),{name:safeFileName})],
             allowedMentions:{parse:[]}
           });
