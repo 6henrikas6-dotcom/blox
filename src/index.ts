@@ -255,6 +255,25 @@ client.on(Events.MessageCreate,async message=>{
     }
   }catch(e){log.error(e,'Message handler');}
 });
+// Admin-only Product Library autocomplete. Choice values are database IDs, not ambiguous names.
+client.on(Events.InteractionCreate,async interaction=>{
+ if(!interaction.isAutocomplete()||interaction.commandName!=='giveproduct')return;
+ try{
+  if(!interaction.inGuild()||!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)){
+   await interaction.respond([]);return;
+  }
+  const search=interaction.options.getFocused().trim().slice(0,100);
+  const products=await db.productLibraryItem.findMany({
+   where:{guildId:interaction.guildId!,...(search?{name:{contains:search,mode:'insensitive' as const}}:{})},
+   select:{id:true,name:true},
+   orderBy:{createdAt:'desc'},take:25
+  });
+  await interaction.respond(products.map(p=>({name:p.name.slice(0,100),value:p.id})));
+ }catch(error){
+  log.warn({error:orderDeliveryErrorInfo(error)},'Giveproduct autocomplete failed');
+  await interaction.respond([]).catch(()=>{});
+ }
+});
 client.on(Events.InteractionCreate,async interaction=>{
   if(!interaction.isChatInputCommand()||!interaction.inGuild())return;
   try{
@@ -262,6 +281,58 @@ client.on(Events.InteractionCreate,async interaction=>{
     const privileged=['setup','security','announce'].includes(cmd);
     if(privileged && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){
       await interaction.reply({content:'Manage Server permission required.',flags:MessageFlags.Ephemeral});return;
+    }
+    if(cmd==='giveproduct'){
+      if(!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)){
+        await interaction.reply({content:'Ši komanda skirta tik administratoriams.',flags:MessageFlags.Ephemeral});return;
+      }
+      const recipient=interaction.options.getUser('user',true);
+      const chosen=interaction.options.getString('product',true).trim();
+      if(recipient.bot){
+        await interaction.reply({content:'Pasirink tikrą Discord narį, ne botą.',flags:MessageFlags.Ephemeral});return;
+      }
+      await interaction.deferReply({flags:MessageFlags.Ephemeral});
+      try{
+        const member=await guild.members.fetch(recipient.id).catch(()=>null);
+        if(!member){
+          await interaction.editReply('Pasirinktas gavėjas nėra šio serverio narys.');return;
+        }
+        // Autocomplete returns a library ID. A manually typed title is accepted only if unique.
+        let product=/^c[a-z0-9]{15,35}$/i.test(chosen)
+          ?await db.productLibraryItem.findFirst({where:{id:chosen,guildId:id}})
+          :null;
+        if(!product){
+          const exact=await db.productLibraryItem.findMany({where:{guildId:id,name:{equals:chosen,mode:'insensitive'}},take:2});
+          if(exact.length>1){
+            await interaction.editReply('Rasti keli produktai tokiu pavadinimu. Pasirink konkretų produktą iš automatinio sąrašo.');return;
+          }
+          product=exact[0]??null;
+        }
+        if(!product){
+          await interaction.editReply('Produktas nerastas Product Library. Pasirink jį iš siūlomo sąrašo.');return;
+        }
+        if(!product.fileData?.length||!product.fileName){
+          await interaction.editReply('Šiam produktui nėra pridėto failo. Patikrink Product Library.');return;
+        }
+        const safeFileName=orderAttachmentName(product.fileName,product.id);
+        const productLabel=product.name.replace(/[@*_~`|]/g,'').slice(0,150);
+        try{
+          await recipient.send({
+            content:'🎁 **Lextrum Development · Product Delivery**\\n\\n**Product:** '+productLabel+'\\n\\n📎 Your product file is attached below.\\n🔐 Please respect the creator’s licence; do not share or resell this file without permission.',
+            files:[new AttachmentBuilder(Buffer.from(product.fileData),{name:safeFileName})],
+            allowedMentions:{parse:[]}
+          });
+        }catch(error){
+          log.warn({error:orderDeliveryErrorInfo(error),guildId:id,productId:product.id,recipientId:recipient.id},'Giveproduct DM delivery failed');
+          await interaction.editReply('Nepavyko išsiųsti produkto į DM. Patikrink gavėjo privatumo nustatymus, ar botas neužblokuotas ir ar failas neviršija Discord limito.');return;
+        }
+        await db.auditEvent.create({data:{guildId:id,event:'ADMIN_PRODUCT_GIVEN',actorId:interaction.user.id,detail:JSON.stringify({productId:product.id,productName:product.name,recipientId:recipient.id})}}).catch(error=>log.warn({error:orderDeliveryErrorInfo(error)},'Giveproduct audit failed'));
+        await interaction.editReply('✅ Produktas **'+productLabel+'** sėkmingai išsiųstas į <@'+recipient.id+'> DM.');
+      }catch(error){
+        log.error({error:orderDeliveryErrorInfo(error)},'Giveproduct failed');
+        await interaction.editReply('Nepavyko surasti arba išsiųsti produkto. Bandyk dar kartą.').catch(()=>{});
+      }
+      return;
     }
     if(cmd==='dm-update'){
       if(!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)){
