@@ -402,12 +402,24 @@ client.on(Events.InteractionCreate,async interaction=>{
         await interaction.reply({content:'Invalid order number or product name.',flags:MessageFlags.Ephemeral});return;
       }
       const order=await db.digitalOrder.findUnique({where:{guildId_orderNumber:{guildId:id,orderNumber}},include:{items:{select:{id:true,productName:true,productNumber:true,fileName:true,deliveredAt:true,deliveryState:true,preparationStatus:true}}}});
-      const matches=order?.items.filter(item=>item.productName.trim().toLocaleLowerCase('en-US')===productName.toLocaleLowerCase('en-US'))??[];
-      if(matches.length>1){await interaction.reply({content:'Multiple products have that name in this order. Please contact support to clarify which product you want to receive.',flags:MessageFlags.Ephemeral});return;}
-      const item=matches[0];
-      if(!order||!item){await interaction.reply({content:'Order or product not found. Check the order number and enter the exact product name shown in your purchase.',flags:MessageFlags.Ephemeral});return;}
+      // Check ownership before disclosing order contents or selecting a product.
+      if(!order){await interaction.reply({content:'Order not found. Please check your order number or contact support.',flags:MessageFlags.Ephemeral});return;}
       if(!order.buyerId){await interaction.reply({content:'Užsakymas dar nepriskirtas pirkėjui. Susisiek su administracija.',flags:MessageFlags.Ephemeral});return;}
       if(order.buyerId!==interaction.user.id){await interaction.reply({content:'Šis užsakymas nepriskirtas tavo Discord paskyrai.',flags:MessageFlags.Ephemeral});return;}
+      // Normalize typographic dashes, repeated whitespace and Unicode variants.
+      // Do not use fuzzy substring matching for multi-item orders: that could deliver the wrong product.
+      const normalizeProduct=(value:string)=>value.normalize('NFKC').toLocaleLowerCase('en-US')
+       .replace(/[\u2010-\u2015\u2212]/g,'-').replace(/\s+/g,' ').trim();
+      const requested=normalizeProduct(productName);
+      const matches=order.items.filter(item=>normalizeProduct(item.productName)===requested);
+      const numberInput=productName.trim().replace(/^#/, '');
+      const byNumber=/^[a-zA-Z0-9_-]{1,30}$/.test(numberInput)?order.items.filter(item=>item.productNumber===numberInput):[];
+      // A unique product on a verified buyer's order can be safely selected without requiring an exact title.
+      const candidates=matches.length?matches:byNumber.length?byNumber:order.items.length===1?order.items:[];
+      if(candidates.length!==1){
+        await interaction.reply({content:candidates.length>1?'Several products matched. Please use the product number from your order or contact support.':'Product could not be identified. Please enter its exact name or product number from the order; contact support if the issue persists.',flags:MessageFlags.Ephemeral});return;
+      }
+      const item=candidates[0];
       if(item.deliveredAt||item.deliveryState!=='pending'){await interaction.reply({content:'This product has already been delivered or is currently being sent.',flags:MessageFlags.Ephemeral});return;}
       if(!item.fileName||item.preparationStatus!=='ready'){
         const reviewing=item.preparationStatus==='reviewing';
