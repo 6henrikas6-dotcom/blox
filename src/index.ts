@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { randomInt } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { Client, GatewayIntentBits, Events, PermissionFlagsBits, ChannelType, EmbedBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder, FileBuilder } from 'discord.js';
 import pino from 'pino';
@@ -53,6 +53,28 @@ function orderDeliveryErrorInfo(error:unknown){
 const joins=new Map<string,number[]>();
 const cooldown=new Map<string,number>();
 const inviteCache=new Map<string,Map<string,{uses:number;inviterId:string|null}>>();
+const pendingProductAnnouncements=new Map<string,{guildId:string;adminId:string;productId:string;productName:string;title:string;message:string;expires:number}>();
+const productAnnouncementsInProgress=new Set<string>();
+// Only order records assigned to Discord buyers are available here; ClearlyDev purchases are not automatically imported.
+async function productAnnouncementRecipients(guildId:string,productName:string){
+ const matchingOrders=await db.digitalOrder.findMany({
+  where:{guildId,buyerId:{not:null},items:{some:{productName:{equals:productName,mode:'insensitive'}}}},
+  select:{buyerId:true},take:501
+ });
+ if(matchingOrders.length>500)throw new Error('TOO_MANY_ORDERS');
+ return [...new Set(matchingOrders.map(o=>o.buyerId).filter((id):id is string=>!!id))];
+}
+async function productAnnouncementRecent(guildId:string,productId:string){
+ const recent=await db.auditEvent.findMany({
+  where:{guildId,event:'PRODUCT_ANNOUNCEMENT_STARTED',createdAt:{gte:new Date(Date.now()-24*60*60_000)}},
+  select:{detail:true},orderBy:{createdAt:'desc'},take:150
+ });
+ return recent.some(event=>{
+  try{return (JSON.parse(event.detail??'{}') as {productId?:string}).productId===productId;}
+  catch{return false;}
+ });
+}
+
 
 const messageBursts=new Map<string,{at:number;signature:string;attachmentCount:number}[]>();
 const violations=new Map<string,{count:number;last:number}>();
@@ -257,7 +279,8 @@ client.on(Events.MessageCreate,async message=>{
 });
 // Admin-only Product Library autocomplete. Choice values are database IDs, not ambiguous names.
 client.on(Events.InteractionCreate,async interaction=>{
- if(!interaction.isAutocomplete()||interaction.commandName!=='giveproduct')return;
+ if(!interaction.isAutocomplete()||!['giveproduct','product'].includes(interaction.commandName))return;
+ if(interaction.commandName==='product'&&interaction.options.getSubcommand(false)!=='announcement')return;
  try{
   if(!interaction.inGuild()||!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)){
    await interaction.respond([]);return;
@@ -281,6 +304,42 @@ client.on(Events.InteractionCreate,async interaction=>{
     const privileged=['setup','security','announce'].includes(cmd);
     if(privileged && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)){
       await interaction.reply({content:'Manage Server permission required.',flags:MessageFlags.Ephemeral});return;
+    }
+    if(cmd==='product'&&sub==='announcement'){
+      if(!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)){
+        await interaction.reply({content:'Only server administrators can send product announcements.',flags:MessageFlags.Ephemeral});return;
+      }
+      const productId=interaction.options.getString('product',true).trim();
+      const title=interaction.options.getString('title',true).trim();
+      const message=interaction.options.getString('message',true).trim();
+      if(!/^c[a-z0-9]{15,35}$/i.test(productId)){
+        await interaction.reply({content:'Select a product from the Product Library suggestions.',flags:MessageFlags.Ephemeral});return;
+      }
+      await interaction.deferReply({flags:MessageFlags.Ephemeral});
+      try{
+        const product=await db.productLibraryItem.findFirst({where:{id:productId,guildId:id},select:{id:true,name:true}});
+        if(!product){await interaction.editReply('Product Library entry not found in this server.');return;}
+        if(await productAnnouncementRecent(id,product.id)){
+          await interaction.editReply('An announcement for this product was already started in the last 24 hours. To avoid duplicate DMs, try again later.');return;
+        }
+        const users=await productAnnouncementRecipients(id,product.name);
+        if(!users.length){await interaction.editReply('No buyers found in the Lextrum Orders database for **'+product.name.replace(/[@*_~`|]/g,'')+'**. Product names in Orders and Product Library must match. External purchases are not imported automatically.');return;}
+        if(users.length>50){await interaction.editReply('Found '+users.length+' buyers. The safe limit is 50 recipients per announcement; no DMs were sent.');return;}
+        const token=randomUUID();
+        pendingProductAnnouncements.set(token,{guildId:id,adminId:interaction.user.id,productId:product.id,productName:product.name,title,message,expires:Date.now()+10*60_000});
+        const previewText='📣 **Confirm Product Announcement**\n**Product:** '+product.name.replace(/[@*_~`|]/g,'')+
+         '\n**Buyer accounts in Orders:** '+users.length+
+         '\n\n**'+title.replace(/[@*_~`|]/g,'')+'**\n'+message.replace(/@everyone|@here/g,'[mention disabled]')+
+         '\n\nConfirm to send one private DM per eligible buyer. Opted-out customers will be excluded. Only product-related updates are allowed.';
+        await interaction.editReply({content:previewText,components:[new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder().setCustomId('lx_prod_announce_confirm:'+token).setLabel('Confirm & send DMs').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId('lx_prod_announce_cancel:'+token).setLabel('Cancel').setStyle(ButtonStyle.Secondary)
+        )],allowedMentions:{parse:[]}});
+      }catch(error){
+        log.warn({error:orderDeliveryErrorInfo(error),guildId:id},'Product announcement preparation failed');
+        await interaction.editReply('Unable to prepare the announcement. The order list may be too large or temporarily unavailable.');
+      }
+      return;
     }
     if(cmd==='giveproduct'){
       if(!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)){
@@ -1043,6 +1102,68 @@ client.on(Events.InteractionCreate,async interaction=>{
   log.error(error,'Suggestion V2 vote failed');
   if(interaction.deferred||interaction.replied)await interaction.editReply('Nepavyko užregistruoti balso.').catch(()=>{});
   else await interaction.reply({content:'Nepavyko užregistruoti balso.',flags:MessageFlags.Ephemeral}).catch(()=>{});
+ }
+});
+
+// Explicit administrator confirmation before sending product-specific DMs.
+client.on(Events.InteractionCreate,async interaction=>{
+ if(!interaction.isButton()||!interaction.inGuild())return;
+ if(!interaction.customId.startsWith('lx_prod_announce_confirm:')&&!interaction.customId.startsWith('lx_prod_announce_cancel:'))return;
+ const token=interaction.customId.slice(interaction.customId.lastIndexOf(':')+1);
+ const pending=pendingProductAnnouncements.get(token);
+ if(!pending||pending.expires<Date.now()||pending.guildId!==interaction.guildId){
+  pendingProductAnnouncements.delete(token);
+  await interaction.reply({content:'This announcement confirmation has expired. Run the command again.',flags:MessageFlags.Ephemeral});return;
+ }
+ if(pending.adminId!==interaction.user.id||!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)){
+  await interaction.reply({content:'Only the administrator who created this announcement can confirm it.',flags:MessageFlags.Ephemeral});return;
+ }
+ if(interaction.customId.startsWith('lx_prod_announce_cancel:')){
+  pendingProductAnnouncements.delete(token);
+  await interaction.update({content:'Announcement cancelled. No DMs were sent.',components:[]});return;
+ }
+ if(productAnnouncementsInProgress.has(pending.productId)){
+  await interaction.reply({content:'An announcement for this product is already being processed.',flags:MessageFlags.Ephemeral});return;
+ }
+ productAnnouncementsInProgress.add(pending.productId);
+ pendingProductAnnouncements.delete(token);
+ await interaction.deferUpdate();
+ try{
+  if(await productAnnouncementRecent(pending.guildId,pending.productId)){
+   await interaction.editReply({content:'Announcement already started for this product within 24 hours. No duplicate DMs sent.',components:[]});return;
+  }
+  const product=await db.productLibraryItem.findFirst({where:{id:pending.productId,guildId:pending.guildId},select:{id:true,name:true}});
+  if(!product){await interaction.editReply({content:'Product was removed from Product Library. Nothing sent.',components:[]});return;}
+  const recipients=await productAnnouncementRecipients(pending.guildId,product.name);
+  if(!recipients.length||recipients.length>50){
+   await interaction.editReply({content:'Recipient count changed or exceeds the 50-person safety limit. Please start a new announcement.',components:[]});return;
+  }
+  // Reserve product's 24h send slot BEFORE any DM. If the process restarts, duplicate sends are blocked.
+  await db.auditEvent.create({data:{guildId:pending.guildId,event:'PRODUCT_ANNOUNCEMENT_STARTED',actorId:interaction.user.id,detail:JSON.stringify({productId:product.id,title:pending.title,recipientCount:recipients.length})}});
+  await interaction.editReply({content:'📨 Product announcement started for '+recipients.length+' buyer accounts. Sending DMs...',components:[]});
+  let delivered=0,blocked=0,optedOut=0,notMember=0;
+  const clean=(text:string)=>text.replace(/@everyone|@here/g,'[mention disabled]').replace(/<@!?\d+>/g,'[mention disabled]');
+  for(const userId of recipients){
+   try{
+    const subscription=await db.subscription.findUnique({where:{guildId_userId:{guildId:pending.guildId,userId}},select:{enabled:true}});
+    if(subscription&&!subscription.enabled){optedOut++;continue;}
+    const member=await interaction.guild!.members.fetch(userId).catch(()=>null);
+    if(!member||member.user.bot){notMember++;continue;}
+    await member.send({content:'📣 **Lextrum Development · Product Update**\\n**Product:** '+clean(product.name)+'\\n**'+clean(pending.title)+'**\\n\\n'+clean(pending.message)+'\\n\\n_This update concerns your recorded purchase. To opt out of future update DMs, use /updates unsubscribe in the server._',allowedMentions:{parse:[]}});
+    delivered++;
+   }catch(error){
+    blocked++;
+    log.warn({error:orderDeliveryErrorInfo(error),guildId:pending.guildId,recipientId:userId,productId:product.id},'Product update DM failed');
+   }
+   await new Promise(resolve=>setTimeout(resolve,850));
+  }
+  await db.auditEvent.create({data:{guildId:pending.guildId,event:'PRODUCT_ANNOUNCEMENT_RESULT',actorId:interaction.user.id,detail:JSON.stringify({productId:product.id,delivered,blocked,optedOut,notMember})}}).catch(error=>log.warn({error:orderDeliveryErrorInfo(error)},'Product announcement audit result failed'));
+  await interaction.editReply({content:'✅ Product update finished: '+delivered+' delivered, '+blocked+' failed/blocked, '+optedOut+' opted out, '+notMember+' no longer in server.',components:[]});
+ }catch(error){
+  log.error({error:orderDeliveryErrorInfo(error),productId:pending.productId},'Product announcement failed');
+  await interaction.editReply({content:'Failed to send the announcement. Check bot logs; retrying is limited to prevent duplicate DMs.',components:[]}).catch(()=>{});
+ }finally{
+  productAnnouncementsInProgress.delete(pending.productId);
  }
 });
 
