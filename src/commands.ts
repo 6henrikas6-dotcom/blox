@@ -58,6 +58,9 @@ export const commands = [
   .addStringOption(o=>o.setName('product_name').setDescription('Produkto pavadinimas').setMinLength(1).setMaxLength(150).setRequired(true))
   .addUserOption(o=>o.setName('buyer').setDescription('Pirkėjas (rekomenduojama)'))
   .addStringOption(o=>o.setName('productnumber').setDescription('Prekės numeris (numatyta: 1)').setMaxLength(30)),
+ new SlashCommandBuilder().setName('giveproduct').setDescription('Send a Product Library file to a server member (admin only)').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+  .addUserOption(o=>o.setName('user').setDescription('Member who will receive the product via DM').setRequired(true))
+  .addStringOption(o=>o.setName('product').setDescription('Select a product from your library').setRequired(true).setAutocomplete(true)),
  new SlashCommandBuilder().setName('recieveorder').setDescription('Receive your purchased product in DMs')
   .addStringOption(o=>o.setName('ordernumber').setDescription('Your order number').setRequired(true))
   .addStringOption(o=>o.setName('productname').setDescription('Exact product name').setRequired(true)),
