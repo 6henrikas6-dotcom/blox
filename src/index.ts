@@ -409,7 +409,7 @@ client.on(Events.InteractionCreate,async interaction=>{
       // Normalize typographic dashes, repeated whitespace and Unicode variants.
       // Do not use fuzzy substring matching for multi-item orders: that could deliver the wrong product.
       const normalizeProduct=(value:string)=>value.normalize('NFKC').toLocaleLowerCase('en-US')
-       .replace(/[\\u2010-\\u2015\\u2212]/g,'-').replace(/\\s+/g,' ').trim();
+       .replace(/[\u2010-\u2015\u2212]/g,'-').replace(/\s+/g,' ').trim();
       const requested=normalizeProduct(productName);
       const matches=order.items.filter(item=>normalizeProduct(item.productName)===requested);
       const numberInput=productName.trim().replace(/^#/, '');
