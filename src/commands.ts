@@ -58,6 +58,11 @@ export const commands = [
   .addStringOption(o=>o.setName('product_name').setDescription('Produkto pavadinimas').setMinLength(1).setMaxLength(150).setRequired(true))
   .addUserOption(o=>o.setName('buyer').setDescription('Pirkėjas (rekomenduojama)'))
   .addStringOption(o=>o.setName('productnumber').setDescription('Prekės numeris (numatyta: 1)').setMaxLength(30)),
+ new SlashCommandBuilder().setName('product').setDescription('Product-specific customer updates (administrators only)').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+  .addSubcommand(c=>c.setName('announcement').setDescription('DM customers who bought a specific Product Library product')
+   .addStringOption(o=>o.setName('product').setDescription('Select product from Product Library').setRequired(true).setAutocomplete(true))
+   .addStringOption(o=>o.setName('title').setDescription('Update heading').setMinLength(3).setMaxLength(100).setRequired(true))
+   .addStringOption(o=>o.setName('message').setDescription('Important product update, not advertising').setMinLength(5).setMaxLength(1200).setRequired(true))),
  new SlashCommandBuilder().setName('giveproduct').setDescription('Send a Product Library file to a server member (admin only)').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addUserOption(o=>o.setName('user').setDescription('Member who will receive the product via DM').setRequired(true))
   .addStringOption(o=>o.setName('product').setDescription('Select a product from your library').setRequired(true).setAutocomplete(true)),
